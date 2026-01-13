@@ -1,5 +1,5 @@
 STATUS
-Estructura creada. Implementados loader + normalización + K-Means (loop y numpy) + wrapper sklearn. Tests básicos pasaron.
+Implementaciones listas (loop, numpy, baseline sklearn), comparativa con silhouette, UI Streamlit operativa. Tests completos pasando.
 
 ---
 
@@ -100,10 +100,9 @@ Parámetros: `k`, `max_iter`, `tol`, `random_state`, `init` (random / k-means++ 
 ---
 
 ## TO DO (próximo paso)
-1) Implementar evaluación/comparativa (multi-k, multi-run, métricas y gráficos).
-2) Armar UI Streamlit con selector único.
-3) Dejar todo comentado (docstrings + type hints) y agregar instrucciones de ejecución.
-4) Empaquetar para deploy en Streamlit Community Cloud + guía para informe PDF.
+1) Empaquetar para deploy en Streamlit Community Cloud (revisar `requirements.txt`, instrucciones y secrets si aplica).
+2) Completar guía para el informe PDF (figuras/metricas exportables).
+3) Revisión final de comentarios/docstrings y ajuste estético (tabs/espacios en app.py si se desea).
 
 ---
 
@@ -112,15 +111,28 @@ DONE
 - Scaffold del proyecto y dependencias.
 - Loader ARFF + normalización z-score.
 - Implementaciones K-Means (loop, numpy) y wrapper sklearn.
-- Tests unitarios iniciales OK.
+- Evaluación/comparativa con silhouette opcional.
+- UI Streamlit con selector, gráficos y predicción de registro nuevo.
+- Tests unitarios y de integración OK.
 
 ---
 
-## Testing ejecutado (2026-01-08)
-- `pytest` (5 tests):
+## Testing ejecutado (2026-01-13)
+- `pytest` (8 tests):
 	- `tests/test_data.py`: z-score y smoke load del ARFF.
 	- `tests/test_kmeans.py`: convergencia y centroides esperados en toy data; inercia consistente loop vs numpy; manejo de clusters vacíos.
+	- `tests/test_evaluation.py`: resultados coherentes multi-k y multi-impls; métricas no negativas; silhouette en rango.
+	- `tests/test_app_import.py`: import smoke de la app Streamlit.
 Resultado: **todos los tests pasaron**.
+
+---
+
+## Auditoría rápida (2026-01-13)
+- `app.py`: `from __future__` al inicio; cacheo de datos; selector de implementación; gráficos de inercia/tiempo/silhouette; predicción con normalización consistente.
+- `evaluation.py`: silhouette opcional con manejo de excepciones; seeds controlados.
+- `kmeans_loop` / `kmeans_numpy`: API homogénea (`fit`, `predict`, `fit_predict`, `inertia_`, `labels_`, `cluster_centers_`, `n_iter_`); manejo de clusters vacíos reubicando el punto más lejano.
+- `data.py`: normalización z-score con protección ante std ~0; loader ARFF soporta `class` string/int.
+- Riesgos abiertos: silhouette puede ser costoso para el dataset completo; estilo (tabs) en `app.py` es estético.
 
 ---
 

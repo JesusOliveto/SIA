@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional
 
 import numpy as np
+from sklearn.metrics import silhouette_score
 
 from .kmeans_base import KMeansLike
 
@@ -18,6 +19,7 @@ class RunResult:
     fit_time: float
     n_iter: int
     labels: np.ndarray
+    silhouette: Optional[float] = None
 
 
 def evaluate_models(
@@ -26,6 +28,7 @@ def evaluate_models(
     builders: Dict[str, Callable[[int, Optional[int]], KMeansLike]],
     n_runs: int = 3,
     random_state: Optional[int] = None,
+    compute_silhouette: bool = False,
 ) -> List[RunResult]:
     """Run multiple K selections and implementations, returning comparable metrics."""
 
@@ -39,6 +42,12 @@ def evaluate_models(
                 start = time.perf_counter()
                 model.fit(X)
                 elapsed = time.perf_counter() - start
+                sil_val = None
+                if compute_silhouette and k > 1:
+                    try:
+                        sil_val = float(silhouette_score(X, model.labels_))
+                    except Exception:
+                        sil_val = None
                 results.append(
                     RunResult(
                         impl=name,
@@ -48,6 +57,7 @@ def evaluate_models(
                         fit_time=elapsed,
                         n_iter=model.n_iter_,
                         labels=model.labels_,
+                        silhouette=sil_val,
                     )
                 )
     return results
