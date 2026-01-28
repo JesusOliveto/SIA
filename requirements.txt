@@ -1,8 +1,8 @@
-numpy
-pandas
-scipy
-scikit-learn
-streamlit
-matplotlib
+numpy>=2.0.0
+pandas>=2.0.0
+scipy>=1.10.0
+scikit-learn>=1.5.0
+streamlit>=1.50.0
+matplotlib>=3.10.0
 pytest
-plotly
+plotly>=6.0.0
