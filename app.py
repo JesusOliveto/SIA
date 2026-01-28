@@ -12,6 +12,7 @@ from src.evaluation import evaluate_models
 from src.kmeans_loop import KMeansLoop
 from src.kmeans_numpy import KMeansNumpy
 from src.kmeans_sklearn import KMeansSklearn
+from src.visualization import plot_pca_2d, plot_radar_centroids
 
 
 st.set_page_config(page_title="K-Means SIA", layout="wide")
@@ -159,3 +160,34 @@ if st.button("Predecir cluster"):
 	st.success(f"Cluster asignado: {label}")
 	st.write("Distancias a centroides:")
 	st.write({f"c{idx}": float(d) for idx, d in enumerate(distances)})
+
+st.markdown("---")
+st.subheader("Visualización Profunda")
+
+col_viz1, col_viz2 = st.columns(2)
+with col_viz1:
+	viz_impl = st.selectbox("Implementación", ["numpy", "sklearn"], key="viz_impl")
+	viz_k = st.slider("k", 2, 10, 4, key="viz_k")
+
+with col_viz2:
+	viz_seed = st.number_input("Semilla", value=42, key="viz_seed")
+	if st.button("Generar Gráficos"):
+		with st.spinner("Entrenando y generando gráficos..."):
+			# Fit single model
+			model = builder_factory(viz_impl)(viz_k, int(viz_seed))
+			model.fit(norm_bundle.X)
+			
+			# PCA Plot
+			st.write("### Mapa de Clusters (PCA 2D)")
+			fig_pca = plot_pca_2d(norm_bundle.X, model.labels_)
+			st.plotly_chart(fig_pca, use_container_width=True)
+			
+			# Radar Chart
+			st.write("### Perfil de Centroides")
+			# We use the scaler to inverse transform centroids if we want original units, 
+			# but normalized units are better for comparison in radar if scales differ wildy.
+			# Let's show normalized for now to keep the web consistent.
+			# If needed, we can inverse transform: 
+			# real_centers = scaler.mean_ + model.cluster_centers_ * scaler.scale_
+			fig_radar = plot_radar_centroids(model.cluster_centers_, bundle.feature_names)
+			st.plotly_chart(fig_radar, use_container_width=True)
