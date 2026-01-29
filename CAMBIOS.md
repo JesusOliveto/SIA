@@ -3,36 +3,30 @@
 Este documento detalla secuencialmente las intervenciones realizadas en el proyecto para cumplir con los requerimientos, corregir errores y mejorar la calidad del software.
 
 ## 1. Auditoría Inicial y Testing
-- **Diagnóstico:** Se detectó que la suite de tests (`pytest`) no se ejecutaba completamente por problemas de entorno y dependencias.
-- **Acción:** Se configuró el entorno virtual (`.venv`) correctamente y se verificaron 8 tests unitarios.
+- **Acción:** Se configuró el entorno virtual (`.venv`) y se verificaron 8 tests unitarios.
 
 ## 2. Mejoras de Visualización
-- **Objetivo:** Mejorar la apreciación de los clusters.
-- **Acción:**
-    - Se agregó `plotly`.
-    - Se implementaron **Mapa PCA 2D** y **Radar Chart**.
+- **Acción:** Se implementaron **Mapa PCA 2D** y **Radar Chart** interactivos.
 
 ## 3. Corrección de Despliegue (Deploy)
-- **Error:** Fallo en el despliegue por versiones obsoletas.
-- **Acción:** Se fijaron versiones modernass en `requirements.txt`.
+- **Acción:** Se fijaron versiones estables en `requirements.txt`.
 
 ## 4. Explicación de Predicciones
-- **Objetivo:** Hacer pedagógico el proceso de clasificación.
 - **Acción:** Se modificó la interfaz para mostrar **Normalización**, **Distancias** y **Decisión** paso a paso.
 
 ## 5. Limpieza de Datos
-- **Objetivo:** Mejorar la calidad estadistica.
-- **Acción:**
-    - Script de limpieza IQR (630 outliers removidos).
-    - Nuevo dataset `whinequalityclean.arff`.
+- **Acción:** Nuevo dataset `whinequalityclean.arff` (630 outliers removidos).
 
 ## 6. Flexibilidad de Interfaz
-- **Objetivo:** Permitir experimentación y análisis profundo.
 - **Acción:**
-    - **Selector de Dataset:** Permite elegir entre datos originales o limpios.
-    - **Modos de Ejecución:**
-        - *Rendimiento:* Promedia 5 corridas para evaluar velocidad y estabilidad.
-        - *Depuración:* Ejecuta una vez mostrando logs internos del algoritmo iteración a iteración.
+    - **Selector de Dataset:** Original vs Limpio.
+    - **Modos de Ejecución:** Rendimiento (Promedio) y Depuración (Logs paso a paso).
+
+## 7. Método del Codo y Documentación UI
+- **Objetivo:** Facilitar la elección de K y mejorar la usabilidad.
+- **Acción:**
+    - Se insertó la sección **"Determinación de K óptimo"** que grafica Inercia vs K.
+    - Se añadieron descripciones explicativas ("captions") debajo de cada título de sección para guiar al usuario.
 
 ---
-**Estado Final:** El proyecto cumple con todos los requerimientos académicos y técnicos, incluyendo mejoras significativas en usabilidad y robustez.
+**Estado Final:** El proyecto cumple con todos los requerimientos académicos y técnicos.

@@ -122,7 +122,32 @@ n_runs = st.sidebar.slider("Corridas por k", 1, 5, 2)
 with_silhouette = st.sidebar.checkbox("Calcular silhouette", value=True)
 
 st.markdown("---")
-st.subheader("Comparativa de implementaciones")
+st.markdown("---")
+st.header("1. Determinación de K óptimo (Método del Codo)")
+st.caption("Esta sección ayuda a identificar la cantidad ideal de clusters ($k$). Busque el punto donde la reducción de la Inercia (error) se estabiliza, formando un 'codo' en el gráfico.")
+
+col_codo1, col_codo2 = st.columns([1, 2])
+with col_codo1:
+    k_elbow_max = st.slider("K máximo para analizar", 5, 15, 10)
+    trigger_elbow = st.button("Calcular Codo")
+
+with col_codo2:
+    if trigger_elbow:
+        with st.spinner("Calculando inercia para rango de k..."):
+            elbow_data = []
+            for k_val in range(1, k_elbow_max + 1):
+                # Use numpy impl for speed, seed 42 for stability
+                model = builder_factory("numpy")(k_val, 42, verbose=False)
+                model.fit(norm_bundle.X)
+                elbow_data.append({"k": k_val, "Inercia (SSE)": model.inertia_})
+            
+            df_elbow = pd.DataFrame(elbow_data)
+            st.line_chart(df_elbow, x="k", y="Inercia (SSE)")
+            st.info("Observe dónde la curva empieza a aplanarse. Ese suele ser un buen valor para $k$.")
+
+st.markdown("---")
+st.header("2. Comparativa de Implementaciones")
+st.caption("Ejecuta múltiples configuraciones en lote para comparar el rendimiento (Tiempo) y la calidad (Inercia, Silhouette) de las distintas implementaciones (Loops vs NumPy vs Sklearn).")
 
 if st.button("Ejecutar comparativa"):
 	if not selected_impls:
@@ -153,7 +178,9 @@ if st.button("Ejecutar comparativa"):
 
 
 st.markdown("---")
-st.subheader("Predicción de un nuevo registro")
+st.markdown("---")
+st.header("3. Predicción de un nuevo registro")
+st.caption("Permite simular la llegada de un nuevo dato (vino) y clasificarlo en uno de los clusters existentes. Muestra el proceso interno de decisión.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -206,7 +233,10 @@ if st.button("Predecir cluster"):
 
 st.markdown("---")
 st.markdown("---")
-st.subheader("Análisis y Ejecución Controlada")
+st.markdown("---")
+st.markdown("---")
+st.header("4. Análisis y Ejecución Controlada")
+st.caption("Profundice en una configuración específica. Use el **Modo Depuración** para ver paso a paso cómo converge el algoritmo, o el **Modo Rendimiento** para obtener estadísticas robustas y gráficos detallados.")
 
 import contextlib
 import io

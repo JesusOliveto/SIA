@@ -7,7 +7,7 @@
 ---
 
 ## 1. Resumen Ejecutivo
-El proyecto cumple con la totalidad de los requerimientos y ofrece una herramienta de análisis completa. Permite experimentar con distintos datasets y modos de ejecución para evaluar el rendimiento a fondo.
+El proyecto cumple con la totalidad de los requerimientos. Se ha añadido una sección dedicada a la **Determinación de K (Método del Codo)** para justificar la elección de parámetros.
 
 ## 2. Auditoría de Requerimientos
 
@@ -17,23 +17,21 @@ El proyecto cumple con la totalidad de los requerimientos y ofrece una herramien
 | **K-Means Propio (No Vectorizado)** | CUMPLIDO | Implementado en `src/kmeans_loop.py`. |
 | **K-Means Propio (Vectorizado)** | CUMPLIDO | Implementado en `src/kmeans_numpy.py`. |
 | **Flexibilidad (k, n_features)** | CUMPLIDO | Soporta cualquier dimensión de datos. |
-| **Normalización** | CUMPLIDO | `ZScoreScaler` implementado y aplicado automáticamente. |
+| **Normalización** | CUMPLIDO | `ZScoreScaler` implementado. |
 | **Comparativa con terceros** | CUMPLIDO | Wrapper de `sklearn` incluido. |
-| **Interfaz Amigable** | CUMPLIDO | UI Streamlit flexible (Dataset original/limpio). |
+| **Interfaz Amigable** | CUMPLIDO | UI Streamlit flexible con Método del Codo y Gráficos. |
 | **Predicción de nuevos datos** | CUMPLIDO | Incluye desglose paso a paso. |
 
 ## 3. Evaluación Técnica
 
 ### Calidad de Código
-- **Datos:** Selector global de dataset (Original vs Limpio).
-- **Modos de Ejecución:**
-    - **Depuración:** Ejecución paso a paso con logs de consola y métricas de una sola corrida.
-    - **Rendimiento:** Ejecución por lotes (5 corridas) para obtener promedios estables de tiempo e inercia.
-- **Visualización:** Módulo `visualization.py` con PCA y Radar Charts.
+- **Método del Codo:** Sección inicial para graficar Inercia vs K.
+- **Modos de Ejecución:** Rendimiento y Depuración.
+- **Datos:** Selector global de dataset.
 
 ### Instrucciones de Ejecución
 1. `pip install -r requirements.txt`
 2. `streamlit run app.py`
 
 ## 4. Conclusión
-El nivel de detalle y control agregado (selección de datos, modos debug/perf) excede las expectativas estándar, permitiendo una defensa muy sólida de la implementación.
+El flujo de trabajo es ahora lineal y lógico: 1) Determinar K (Codo), 2) Comparar algoritmos, 3) Predecir/Analizar a fondo.
