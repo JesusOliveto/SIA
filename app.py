@@ -21,7 +21,7 @@ st.title("K-Means — Calidad de Vino (SIA)")
 
 @st.cache_data
 def load_data() -> tuple[DataBundle, DataBundle]:
-	data_path = Path(__file__).resolve().parent / "winequality.arff"
+	data_path = Path(__file__).resolve().parent / "datasets" / "whinequalityclean.arff"
 	bundle = load_winequality(data_path)
 	norm_bundle, scaler = normalize_bundle(bundle)
 	# guardamos scaler dentro del bundle retornado vía closure para reuso
@@ -84,7 +84,7 @@ def predict_single(impl: str, k: int, sample: np.ndarray, norm_bundle: DataBundl
 	model.fit(norm_bundle.X)
 	labels = model.predict(sample)
 	distances = np.linalg.norm(model.cluster_centers_ - sample, axis=1)
-	return int(labels[0]), distances
+	return int(labels[0]), distances, model
 
 
 bundle, norm_bundle = load_data()
@@ -153,13 +153,38 @@ with col2:
 
 if st.button("Predecir cluster"):
 	sample = np.array(feature_vals, dtype=np.float64).reshape(1, -1)
-	# usar scaler aprendido en normalización
+	
+	# Paso 1: Normalización
+	st.markdown("### Paso 1: Normalización")
+	st.info("Los datos se normalizan (Z-Score) para equiparar el peso de todas las variables.")
+	
 	scaler = getattr(norm_bundle, "scaler")
 	sample_norm = scaler.transform(sample)  # type: ignore[assignment]
-	label, distances = predict_single(impl_pred, k_pred, sample_norm, norm_bundle, int(seed_pred))
-	st.success(f"Cluster asignado: {label}")
-	st.write("Distancias a centroides:")
-	st.write({f"c{idx}": float(d) for idx, d in enumerate(distances)})
+	
+	col_n1, col_n2 = st.columns(2)
+	with col_n1:
+		st.write("Input Original:", pd.DataFrame(sample, columns=bundle.feature_names))
+	with col_n2:
+		st.write("Input Normalizado:", pd.DataFrame(sample_norm, columns=bundle.feature_names))
+
+	# Ejecución
+	label, distances, model = predict_single(impl_pred, k_pred, sample_norm, norm_bundle, int(seed_pred))
+
+	# Paso 2: Distancias
+	st.markdown("### Paso 2: Distancias a Centroides")
+	st.info(f"Se calcula la distancia Euclídea contra los {k_pred} centroides obtenida por el modelo.")
+	
+	dist_df = pd.DataFrame({
+		"Cluster": list(range(len(distances))),
+		"Distancia": distances,
+		"Seleccionado": ["SI" if i == label else "NO" for i in range(len(distances))]
+	})
+	st.dataframe(dist_df.style.highlight_min(subset=["Distancia"], color="lightgreen", axis=0), use_container_width=True)
+
+	# Paso 3: Resultado
+	st.markdown("### Paso 3: Decisión Final")
+	st.success(f"Cluster Asignado: {label}")
+	st.write(f"El punto se asigna al Cluster **{label}** porque es el que minimiza la distancia ({distances[label]:.4f}).")
 
 st.markdown("---")
 st.subheader("Visualización Profunda")
