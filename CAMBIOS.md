@@ -4,37 +4,35 @@ Este documento detalla secuencialmente las intervenciones realizadas en el proye
 
 ## 1. Auditoría Inicial y Testing
 - **Diagnóstico:** Se detectó que la suite de tests (`pytest`) no se ejecutaba completamente por problemas de entorno y dependencias.
-- **Acción:** Se configuró el entorno virtual (`.venv`) correctamente.
-- **Resultado:** Se verificó la ejecución exitosa de **8 tests unitarios**, cubriendo carga de datos, lógica de los algoritmos K-Means (Loop y Numpy) y evaluación.
+- **Acción:** Se configuró el entorno virtual (`.venv`) correctamente y se verificaron 8 tests unitarios.
 
 ## 2. Mejoras de Visualización
-- **Objetivo:** Mejorar la apreciación de los clusters más allá de métricas numéricas.
+- **Objetivo:** Mejorar la apreciación de los clusters.
 - **Acción:**
-    - Se agregó la librería `plotly` a `requirements.txt`.
-    - Se creó el módulo `src/visualization.py`.
-    - Se implementaron dos nuevos gráficos interactivos:
-        1.  **Mapa PCA 2D:** Proyección de los datos a 2 dimensiones para visualizar la separación espacial.
-        2.  **Radar Chart de Centroides:** Gráfico radial para comparar las características promedio de cada cluster (perfil del vino).
-    - Se integró una nueva sección "Visualización Profunda" en `app.py`.
+    - Se agregó `plotly`.
+    - Se implementaron **Mapa PCA 2D** y **Radar Chart**.
 
 ## 3. Corrección de Despliegue (Deploy)
-- **Error:** Fallo en el despliegue en la nube por incompatibilidad entre versiones antiguas de Streamlit (1.19) y nuevas de Altair (6.0).
-- **Acción:** Se actualizaron y fijaron versiones modernas en `requirements.txt` (`streamlit>=1.50.0`, `altair`, etc.) para replicar el entorno local estable.
+- **Error:** Fallo en el despliegue por versiones obsoletas.
+- **Acción:** Se fijaron versiones modernass en `requirements.txt`.
 
 ## 4. Explicación de Predicciones
-- **Objetivo:** Hacer pedagógico el proceso de clasificación de un nuevo registro.
-- **Acción:** Se modificó la interfaz de predicción en `app.py` para mostrar el proceso paso a paso:
-    1.  **Normalización:** Comparativa de valores crudos vs normalizados (Z-Score).
-    2.  **Cálculo de Distancias:** Tabla detallada de la distancia a cada centroide.
-    3.  **Decisión:** Explicación textual de la asignación basada en la distancia mínima.
+- **Objetivo:** Hacer pedagógico el proceso de clasificación.
+- **Acción:** Se modificó la interfaz para mostrar **Normalización**, **Distancias** y **Decisión** paso a paso.
 
 ## 5. Limpieza de Datos
-- **Objetivo:** Mejorar la calidad de los grupos eliminando ruido estadístico.
+- **Objetivo:** Mejorar la calidad estadistica.
 - **Acción:**
-    - Se movió el dataset original a la carpeta `datasets/`.
-    - Se creó un script de limpieza basado en el **Rango Intercuartil (IQR)**.
-    - Se generó un nuevo dataset `datasets/whinequalityclean.arff` eliminando 630 registros atípicos (~18% de los datos).
-    - Se reconfiguró `app.py` para utilizar este dataset depurado por defecto.
+    - Script de limpieza IQR (630 outliers removidos).
+    - Nuevo dataset `whinequalityclean.arff`.
+
+## 6. Flexibilidad de Interfaz
+- **Objetivo:** Permitir experimentación y análisis profundo.
+- **Acción:**
+    - **Selector de Dataset:** Permite elegir entre datos originales o limpios.
+    - **Modos de Ejecución:**
+        - *Rendimiento:* Promedia 5 corridas para evaluar velocidad y estabilidad.
+        - *Depuración:* Ejecuta una vez mostrando logs internos del algoritmo iteración a iteración.
 
 ---
 **Estado Final:** El proyecto cumple con todos los requerimientos académicos y técnicos, incluyendo mejoras significativas en usabilidad y robustez.

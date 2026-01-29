@@ -9,7 +9,7 @@ from .utils import ensure_rng
 class KMeansLoop:
     """K-Means implementation using explicit Python loops."""
 
-    def __init__(self, n_clusters: int, max_iter: int = 300, tol: float = 1e-4, n_init: int = 1, random_state: int | None = None) -> None:
+    def __init__(self, n_clusters: int, max_iter: int = 300, tol: float = 1e-4, n_init: int = 1, random_state: int | None = None, verbose: bool = False) -> None:
         if n_clusters <= 0:
             raise ValueError("n_clusters must be positive.")
         self.n_clusters = n_clusters
@@ -17,6 +17,7 @@ class KMeansLoop:
         self.tol = tol
         self.n_init = n_init
         self.random_state = random_state
+        self.verbose = verbose
 
         self.cluster_centers_: np.ndarray | None = None
         self.labels_: np.ndarray | None = None
@@ -60,8 +61,16 @@ class KMeansLoop:
                 self._fix_empty_clusters(X, new_centers, labels, rng)
 
             shift = float(np.max(np.linalg.norm(new_centers - centers, axis=1)))
+            
+            if self.verbose:
+                # Calculate inertia for logging (expensive but useful for debug)
+                current_inertia = compute_inertia(X, new_centers, labels)
+                print(f"[Loop] Iter {iteration+1}: shift={shift:.6f}, inertia={current_inertia:.4f}")
+
             centers = new_centers
             if shift <= self.tol:
+                if self.verbose:
+                    print(f"[Loop] Converged at iter {iteration+1}")
                 break
 
         inertia = compute_inertia(X, centers, labels)

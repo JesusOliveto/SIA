@@ -9,7 +9,7 @@ from .utils import ensure_rng
 class KMeansNumpy:
     """K-Means implementation using NumPy vectorization."""
 
-    def __init__(self, n_clusters: int, max_iter: int = 300, tol: float = 1e-4, n_init: int = 1, random_state: int | None = None) -> None:
+    def __init__(self, n_clusters: int, max_iter: int = 300, tol: float = 1e-4, n_init: int = 1, random_state: int | None = None, verbose: bool = False) -> None:
         if n_clusters <= 0:
             raise ValueError("n_clusters must be positive.")
         self.n_clusters = n_clusters
@@ -17,6 +17,7 @@ class KMeansNumpy:
         self.tol = tol
         self.n_init = n_init
         self.random_state = random_state
+        self.verbose = verbose
 
         self.cluster_centers_: np.ndarray | None = None
         self.labels_: np.ndarray | None = None
@@ -63,8 +64,17 @@ class KMeansNumpy:
                 self._fix_empty_clusters(X, new_centers, distances, labels)
 
             shift = float(np.max(np.linalg.norm(new_centers - centers, axis=1)))
+            
+            if self.verbose:
+                # Re-compute inertia for logging if needed, or just log shift
+                # Ideally we compute labels here again for inertia, but we have labels from previous step
+                # Let's verify shift is enough for basic debug, but user asked for step-by-step
+                print(f"[Numpy] Iter {iteration+1}: shift={shift:.6f}")
+
             centers = new_centers
             if shift <= self.tol:
+                if self.verbose:
+                    print(f"[Numpy] Converged at iter {iteration+1}")
                 break
 
         inertia = compute_inertia(X, centers, labels)

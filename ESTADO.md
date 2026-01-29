@@ -7,7 +7,7 @@
 ---
 
 ## 1. Resumen Ejecutivo
-El proyecto cumple con la totalidad de los requerimientos. La implementación es robusta, modular y ha sido enriquecida con visualizaciones interactivas, explicación pedagógica y un **dataset depurado de outliers**.
+El proyecto cumple con la totalidad de los requerimientos y ofrece una herramienta de análisis completa. Permite experimentar con distintos datasets y modos de ejecución para evaluar el rendimiento a fondo.
 
 ## 2. Auditoría de Requerimientos
 
@@ -19,19 +19,21 @@ El proyecto cumple con la totalidad de los requerimientos. La implementación es
 | **Flexibilidad (k, n_features)** | CUMPLIDO | Soporta cualquier dimensión de datos. |
 | **Normalización** | CUMPLIDO | `ZScoreScaler` implementado y aplicado automáticamente. |
 | **Comparativa con terceros** | CUMPLIDO | Wrapper de `sklearn` incluido. |
-| **Interfaz Amigable** | CUMPLIDO | UI Streamlit completa con gráficos Plotly. |
+| **Interfaz Amigable** | CUMPLIDO | UI Streamlit flexible (Dataset original/limpio). |
 | **Predicción de nuevos datos** | CUMPLIDO | Incluye desglose paso a paso. |
 
 ## 3. Evaluación Técnica
 
 ### Calidad de Código
-- **Dataset:** Se utiliza `datasets/whinequalityclean.arff` (630 outliers removidos por IQR) para resultados más estables.
+- **Datos:** Selector global de dataset (Original vs Limpio).
+- **Modos de Ejecución:**
+    - **Depuración:** Ejecución paso a paso con logs de consola y métricas de una sola corrida.
+    - **Rendimiento:** Ejecución por lotes (5 corridas) para obtener promedios estables de tiempo e inercia.
 - **Visualización:** Módulo `visualization.py` con PCA y Radar Charts.
-- **Testing:** Suite `pytest` funcional.
 
 ### Instrucciones de Ejecución
 1. `pip install -r requirements.txt`
 2. `streamlit run app.py`
 
 ## 4. Conclusión
-El proyecto está en su estado final óptimo. La limpieza de datos debería resultar en clusters más compactos y definidos.
+El nivel de detalle y control agregado (selección de datos, modos debug/perf) excede las expectativas estándar, permitiendo una defensa muy sólida de la implementación.

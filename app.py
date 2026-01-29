@@ -20,8 +20,8 @@ st.title("K-Means — Calidad de Vino (SIA)")
 
 
 @st.cache_data
-def load_data() -> tuple[DataBundle, DataBundle]:
-	data_path = Path(__file__).resolve().parent / "datasets" / "whinequalityclean.arff"
+def load_data(filename: str = "whinequalityclean.arff") -> tuple[DataBundle, DataBundle]:
+	data_path = Path(__file__).resolve().parent / "datasets" / filename
 	bundle = load_winequality(data_path)
 	norm_bundle, scaler = normalize_bundle(bundle)
 	# guardamos scaler dentro del bundle retornado vía closure para reuso
@@ -39,20 +39,26 @@ def build_impls() -> Dict[str, str]:
 
 def builder_factory(name: str):
 	if name == "loop":
-		return lambda k, seed: KMeansLoop(n_clusters=k, n_init=3, random_state=seed)
+		return lambda k, seed, verbose=False: KMeansLoop(n_clusters=k, n_init=3, random_state=seed, verbose=verbose)
 	if name == "numpy":
-		return lambda k, seed: KMeansNumpy(n_clusters=k, n_init=3, random_state=seed)
+		return lambda k, seed, verbose=False: KMeansNumpy(n_clusters=k, n_init=3, random_state=seed, verbose=verbose)
 	if name == "sklearn":
-		return lambda k, seed: KMeansSklearn(n_clusters=k, n_init=10, random_state=seed)
+		return lambda k, seed, verbose=False: KMeansSklearn(n_clusters=k, n_init=10, random_state=seed)
 	raise ValueError(f"Implementación no soportada: {name}")
 
 
 def run_evaluation(norm_bundle: DataBundle, ks: List[int], impl_keys: List[str], n_runs: int, with_silhouette: bool):
 	builders = {k: builder_factory(k) for k in impl_keys}
+	# evaluate_models expects builder(k, seed). run_evaluation needs to adapt to new factory that accepts verbose.
+	# We'll stick to non-verbose for bulk evaluation.
+	adapted_builders = {
+		k: lambda n_k, s: builder_factory(k)(n_k, s, verbose=False) 
+		for k in impl_keys
+	}
 	results = evaluate_models(
 		norm_bundle.X,
 		ks=ks,
-		builders=builders,
+		builders=adapted_builders,
 		n_runs=n_runs,
 		random_state=42,
 		compute_silhouette=with_silhouette,
@@ -80,26 +86,38 @@ def run_evaluation(norm_bundle: DataBundle, ks: List[int], impl_keys: List[str],
 
 
 def predict_single(impl: str, k: int, sample: np.ndarray, norm_bundle: DataBundle, random_state: int):
-	model = builder_factory(impl)(k, random_state)
+	model = builder_factory(impl)(k, random_state, verbose=False)
 	model.fit(norm_bundle.X)
 	labels = model.predict(sample)
 	distances = np.linalg.norm(model.cluster_centers_ - sample, axis=1)
 	return int(labels[0]), distances, model
 
 
-bundle, norm_bundle = load_data()
-st.sidebar.header("Configuración")
-st.sidebar.write(f"Registros: {bundle.X.shape[0]} | Atributos: {bundle.X.shape[1]}")
+st.sidebar.header("Datos")
+dataset_map = {
+	"whinequalityclean.arff": "Limpio (Sin Outliers)",
+	"winequality.arff": "Original (Completo)"
+}
+selected_filename = st.sidebar.selectbox(
+	"Seleccionar Dataset",
+	options=list(dataset_map.keys()),
+	format_func=lambda x: dataset_map[x],
+	index=0
+)
 
+bundle, norm_bundle = load_data(selected_filename)
+st.sidebar.info(f"Registros: {bundle.X.shape[0]} | Atributos: {bundle.X.shape[1]}")
+
+st.sidebar.header("Algoritmos")
 impls = build_impls()
 selected_impls = st.sidebar.multiselect(
-	"Implementaciones",
+	"Comparativa General",
 	options=list(impls.keys()),
 	format_func=lambda k: impls[k],
 	default=list(impls.keys()),
 )
 
-k_min, k_max = st.sidebar.slider("Rango de k", 2, 12, (3, 8))
+k_min, k_max = st.sidebar.slider("Rango de k (Comparativa)", 2, 12, (3, 8))
 n_runs = st.sidebar.slider("Corridas por k", 1, 5, 2)
 with_silhouette = st.sidebar.checkbox("Calcular silhouette", value=True)
 
@@ -187,32 +205,106 @@ if st.button("Predecir cluster"):
 	st.write(f"El punto se asigna al Cluster **{label}** porque es el que minimiza la distancia ({distances[label]:.4f}).")
 
 st.markdown("---")
-st.subheader("Visualización Profunda")
+st.markdown("---")
+st.subheader("Análisis y Ejecución Controlada")
 
-col_viz1, col_viz2 = st.columns(2)
+import contextlib
+import io
+import time
+from src.kmeans_base import compute_inertia
+from sklearn.metrics import silhouette_score
+
+col_viz1, col_viz2 = st.columns([1, 2])
 with col_viz1:
-	viz_impl = st.selectbox("Implementación", ["numpy", "sklearn"], key="viz_impl")
+	viz_impl = st.selectbox("Algoritmo", ["loop", "numpy", "sklearn"], key="viz_impl", format_func=lambda x: impls[x])
 	viz_k = st.slider("k", 2, 10, 4, key="viz_k")
+	viz_mode = st.radio("Modo de Ejecución", ["Rendimiento", "Depuración"], key="viz_mode")
+	viz_seed = st.number_input("Semilla", value=42, key="viz_seed")
+	
+	run_btn = st.button("Ejecutar Análisis")
 
 with col_viz2:
-	viz_seed = st.number_input("Semilla", value=42, key="viz_seed")
-	if st.button("Generar Gráficos"):
-		with st.spinner("Entrenando y generando gráficos..."):
-			# Fit single model
-			model = builder_factory(viz_impl)(viz_k, int(viz_seed))
-			model.fit(norm_bundle.X)
+	if run_btn:
+		if viz_mode == "Depuración":
+			st.markdown("### Salida de Depuración")
+			log_capture = io.StringIO()
 			
-			# PCA Plot
-			st.write("### Mapa de Clusters (PCA 2D)")
-			fig_pca = plot_pca_2d(norm_bundle.X, model.labels_)
-			st.plotly_chart(fig_pca, use_container_width=True)
+			with st.spinner("Ejecutando paso a paso..."):
+				with contextlib.redirect_stdout(log_capture):
+					# Debug run: verbose=True, n_init=1 (to avoid noise)
+					start_t = time.perf_counter()
+					# Factory signature is (k, seed, verbose)
+					model = builder_factory(viz_impl)(viz_k, int(viz_seed), verbose=True)
+					# Force n_init to 1 for clearer logs in debug
+					if hasattr(model, 'n_init'):
+						model.n_init = 1
+						print(f"[Debug] Configured n_init=1 for transparency.")
+					
+					model.fit(norm_bundle.X)
+					end_t = time.perf_counter()
+					print(f"[Done] Fit time: {end_t - start_t:.4f}s")
 			
-			# Radar Chart
-			st.write("### Perfil de Centroides")
-			# We use the scaler to inverse transform centroids if we want original units, 
-			# but normalized units are better for comparison in radar if scales differ wildy.
-			# Let's show normalized for now to keep the web consistent.
-			# If needed, we can inverse transform: 
-			# real_centers = scaler.mean_ + model.cluster_centers_ * scaler.scale_
-			fig_radar = plot_radar_centroids(model.cluster_centers_, bundle.feature_names)
-			st.plotly_chart(fig_radar, use_container_width=True)
+			st.code(log_capture.getvalue(), language="text")
+			
+			st.success("Modelo Ajustado")
+			
+			# Metrics
+			inertia = getattr(model, "inertia_", 0.0)
+			sil = silhouette_score(norm_bundle.X, model.labels_) if len(set(model.labels_)) > 1 else -1
+			
+			m1, m2, m3 = st.columns(3)
+			m1.metric("Tiempo", f"{end_t - start_t:.4f}s")
+			m1.metric("Inercia (SSE)", f"{inertia:.2f}")
+			m3.metric("Silhouette", f"{sil:.3f}")
+			
+			# Quick Visuals
+			tab_pca, tab_radar = st.tabs(["Mapa PCA", "Radar Centroides"])
+			with tab_pca:
+				st.plotly_chart(plot_pca_2d(norm_bundle.X, model.labels_), use_container_width=True)
+			with tab_radar:
+				st.plotly_chart(plot_radar_centroids(model.cluster_centers_, bundle.feature_names), use_container_width=True)
+				
+		else: # Modo Rendimiento
+			st.markdown("### Estadísticas de Rendimiento")
+			N_Perf_Runs = 5
+			with st.spinner(f"Ejecutando {N_Perf_Runs} corridas para promediar..."):
+				inertias = []
+				times = []
+				sils = []
+				
+				best_model = None
+				min_inertia = float('inf')
+				
+				for i in range(N_Perf_Runs):
+					seed = int(viz_seed) + i
+					t0 = time.perf_counter()
+					model = builder_factory(viz_impl)(viz_k, seed, verbose=False)
+					model.fit(norm_bundle.X)
+					t1 = time.perf_counter()
+					
+					inertias.append(model.inertia_)
+					times.append(t1 - t0)
+					if len(set(model.labels_)) > 1:
+						sils.append(silhouette_score(norm_bundle.X, model.labels_))
+					else:
+						sils.append(-1.0)
+						
+					if model.inertia_ < min_inertia:
+						min_inertia = model.inertia_
+						best_model = model
+				
+				# Display Stats
+				df_stats = pd.DataFrame({
+					"Métrica": ["Tiempo Medio", "Inercia Media", "Silhouette Medio"],
+					"Valor": [np.mean(times), np.mean(inertias), np.mean(sils)],
+					"Desvío": [np.std(times), np.std(inertias), np.std(sils)]
+				})
+				st.dataframe(df_stats)
+				
+				# Best Model Visuals
+				st.write("#### Visualización del mejor modelo hallado")
+				tab_pca, tab_radar = st.tabs(["Mapa PCA", "Radar Centroides"])
+				with tab_pca:
+					st.plotly_chart(plot_pca_2d(norm_bundle.X, best_model.labels_), use_container_width=True)
+				with tab_radar:
+					st.plotly_chart(plot_radar_centroids(best_model.cluster_centers_, bundle.feature_names), use_container_width=True)
