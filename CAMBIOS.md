@@ -3,30 +3,29 @@
 Este documento detalla secuencialmente las intervenciones realizadas en el proyecto para cumplir con los requerimientos, corregir errores y mejorar la calidad del software.
 
 ## 1. Auditoría Inicial y Testing
-- **Acción:** Se configuró el entorno virtual (`.venv`) y se verificaron 8 tests unitarios.
+- **Acción:** Se verificaron 8 tests unitarios.
 
 ## 2. Mejoras de Visualización
-- **Acción:** Se implementaron **Mapa PCA 2D** y **Radar Chart** interactivos.
+- **Acción:** `plotly` para PCA 2D y Radar Charts.
 
 ## 3. Corrección de Despliegue (Deploy)
-- **Acción:** Se fijaron versiones estables en `requirements.txt`.
+- **Acción:** Versiones fijas en `requirements.txt`.
 
 ## 4. Explicación de Predicciones
-- **Acción:** Se modificó la interfaz para mostrar **Normalización**, **Distancias** y **Decisión** paso a paso.
+- **Acción:** Desglose paso a paso (Normalización -> Distancias).
 
 ## 5. Limpieza de Datos
-- **Acción:** Nuevo dataset `whinequalityclean.arff` (630 outliers removidos).
+- **Acción:** Dataset limpio de outliers (IQR).
 
 ## 6. Flexibilidad de Interfaz
-- **Acción:**
-    - **Selector de Dataset:** Original vs Limpio.
-    - **Modos de Ejecución:** Rendimiento (Promedio) y Depuración (Logs paso a paso).
+- **Acción:** Selector de Dataset y Modos (Rendimiento/Depuración).
 
-## 7. Método del Codo y Documentación UI
-- **Objetivo:** Facilitar la elección de K y mejorar la usabilidad.
+## 7. Método del Codo y Mejora UI
+- **Objetivo:** Facilitar la elección de K con alta precisión.
 - **Acción:**
-    - Se insertó la sección **"Determinación de K óptimo"** que grafica Inercia vs K.
-    - Se añadieron descripciones explicativas ("captions") debajo de cada título de sección para guiar al usuario.
+    - Se implementó gráfico interactivo (Plotly) de Inercia vs K.
+    - Se amplió el rango de evaluación hasta **K=30**.
+    - Se añadieron marcadores visuales para identificar mejor el codo.
 
 ---
 **Estado Final:** El proyecto cumple con todos los requerimientos académicos y técnicos.

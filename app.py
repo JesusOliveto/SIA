@@ -128,7 +128,7 @@ st.caption("Esta sección ayuda a identificar la cantidad ideal de clusters ($k$
 
 col_codo1, col_codo2 = st.columns([1, 2])
 with col_codo1:
-    k_elbow_max = st.slider("K máximo para analizar", 5, 15, 10)
+    k_elbow_max = st.slider("K máximo para analizar", 5, 30, 15)
     trigger_elbow = st.button("Calcular Codo")
 
 with col_codo2:
@@ -142,8 +142,21 @@ with col_codo2:
                 elbow_data.append({"k": k_val, "Inercia (SSE)": model.inertia_})
             
             df_elbow = pd.DataFrame(elbow_data)
-            st.line_chart(df_elbow, x="k", y="Inercia (SSE)")
-            st.info("Observe dónde la curva empieza a aplanarse. Ese suele ser un buen valor para $k$.")
+            
+            # Use Plotly for better resolution/interaction
+            import plotly.express as px
+            fig_elbow = px.line(
+                df_elbow, 
+                x="k", 
+                y="Inercia (SSE)", 
+                title="Suma de Errores al Cuadrado vs Numero de Clusters (k)",
+                markers=True,
+                labels={"k": "Número de Clusters (k)", "Inercia (SSE)": "Inercia intra-cluster"}
+            )
+            fig_elbow.update_layout(xaxis=dict(dtick=1)) # Ensure integer ticks for k
+            st.plotly_chart(fig_elbow, use_container_width=True)
+            
+            st.info("Busque el punto de inflexión. Si la curva es suave, considere valores donde la ganancia marginal disminuye (ej. k=5, k=6).")
 
 st.markdown("---")
 st.header("2. Comparativa de Implementaciones")
