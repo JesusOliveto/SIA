@@ -26,9 +26,9 @@ from src.visualization import plot_pca_2d, plot_radar_centroids
 
 
 st.set_page_config(
-    page_title="SIA - K-Means Analysis",
+    page_title="SIA - Analisis K-Means",
     layout="wide",
-    page_icon="🍷"
+    page_icon=None
 )
 
 # --- Header & Sidebar ---
@@ -185,10 +185,10 @@ with_silhouette = st.sidebar.checkbox("Calcular Silhouette Score", value=True)
 
 # --- Tabs for Main Sections ---
 tab_elbow, tab_compare, tab_predict, tab_debug = st.tabs([
-    "📈 1. Método del Codo", 
-    "📊 2. Comparativa", 
-    "🔮 3. Predicción", 
-    "🛠️ 4. Análisis Detallado"
+    "1. Método del Codo", 
+    "2. Comparativa", 
+    "3. Predicción", 
+    "4. Análisis Detallado"
 ])
 
 # --- 1. Elbow Method ---
@@ -243,8 +243,28 @@ with tab_compare:
             
             st.success("Evaluación completada con éxito.")
             
-            st.subheader("Resumen Promedio")
-            st.dataframe(df_summary.style.format({"Inercia": "{:.2f}", "Tiempo (s)": "{:.4f}", "Silhouette": "{:.3f}"}), use_container_width=True)
+            st.subheader("Resumen General")
+            st.markdown(
+                """
+                **Interpretación de Métricas:**
+                - **Inercia (SSE):** Mide la cohesión interna de los clusters. Valores más bajos indican clusters más compactos.
+                - **Silhouette:** Mide qué tan bien definidos están los clusters (-1 a 1). Valores cercanos a 1 son mejores.
+                - **Tiempo:** Tiempo de entrenamiento en segundos. Muestra la eficiencia del algoritmo.
+                """
+            )
+
+            # Highlighting and Formatting
+            st.dataframe(
+                df_summary.style.format({
+                    "Inercia": "{:.2f}", 
+                    "Tiempo (s)": "{:.6f}", 
+                    "Silhouette": "{:.3f}",
+                    "Iteraciones": "{:.1f}"
+                }).background_gradient(subset=["Tiempo (s)"], cmap="RdYlGn_r")  # Red for slow, Green for fast
+                  .background_gradient(subset=["Inercia"], cmap="Blues_r")
+                  .highlight_max(subset=["Silhouette"], color="#d4edda"),
+                use_container_width=True
+            )
             
             col_c1, col_c2 = st.columns(2)
             with col_c1:
@@ -319,7 +339,7 @@ with tab_predict:
         dist_df = pd.DataFrame({
             "Cluster ID": range(p_k),
             "Distancia Euclidiana": distances,
-            "Estado": ["✅ Asignado" if i == label else "❌" for i in range(p_k)]
+            "Estado": ["ASIGNADO" if i == label else "-" for i in range(p_k)]
         })
         st.table(dist_df.style.highlight_min(subset=["Distancia Euclidiana"], color="#d4edda", axis=0))
 

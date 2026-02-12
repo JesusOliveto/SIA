@@ -27,5 +27,15 @@ Este documento detalla secuencialmente las intervenciones realizadas en el proye
     - Se amplió el rango de evaluación hasta **K=30**.
     - Se añadieron marcadores visuales para identificar mejor el codo.
 
+## 8. Refactorización y Documentación
+- **Objetivo:** Mejorar la legibilidad, mantenibilidad y robustez del código.
+- **Acción:**
+    - **Comentarios Exhaustivos:** Se documentaron todas las funciones, métodos y clases.
+    - **Tipado Estricto:** Se corrigieron y completaron las anotaciones de tipos (`typing`).
+    - **Docstrings:** Se estandarizaron los docstrings siguiendo el formato NumPy/Google.
+    - **Corrección de Errores:** Se solucionaron errores de lógica en `KMeansLoop` (asignación de etiquetas) y `KMeansNumpy` (manejo de clusters vacíos).
+    - **Consistencia:** Se unificó el uso de `random_state` y se mejoró el manejo de `verbose`.
+
+
 ---
 **Estado Final:** El proyecto cumple con todos los requerimientos académicos y técnicos.
