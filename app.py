@@ -1,13 +1,23 @@
+"""
+Streamlit Application for K-Means Clustering Analysis.
+Course: Sistemas Inteligentes Artificiales (SIA)
+Project: K-Means Implementation for Wine Quality Analysis
+"""
 from __future__ import annotations
 
+import contextlib
+import io
+import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
+import plotly.express as px
 import streamlit as st
+from sklearn.metrics import silhouette_score
 
-from src.data import DataBundle, normalize_bundle, load_winequality
+from src.data import DataBundle, normalize_bundle, load_winequality, ZScoreScaler
 from src.evaluation import evaluate_models
 from src.kmeans_loop import KMeansLoop
 from src.kmeans_numpy import KMeansNumpy
@@ -15,339 +25,374 @@ from src.kmeans_sklearn import KMeansSklearn
 from src.visualization import plot_pca_2d, plot_radar_centroids
 
 
-st.set_page_config(page_title="K-Means SIA", layout="wide")
-st.title("K-Means — Calidad de Vino (SIA)")
+st.set_page_config(
+    page_title="SIA - K-Means Analysis",
+    layout="wide",
+    page_icon="🍷"
+)
 
+# --- Header & Sidebar ---
+st.title("Sistema de Análisis de Calidad Vitivinícola")
+st.markdown("**Departamento de Inteligencia Artificial - Ultralistic**")
+st.markdown("---")
+
+st.sidebar.title("Configuración")
+st.sidebar.markdown("**Panel de Control**")
 
 @st.cache_data
-def load_data(filename: str = "whinequalityclean.arff") -> tuple[DataBundle, DataBundle]:
-	data_path = Path(__file__).resolve().parent / "datasets" / filename
-	bundle = load_winequality(data_path)
-	norm_bundle, scaler = normalize_bundle(bundle)
-	# guardamos scaler dentro del bundle retornado vía closure para reuso
-	norm_bundle.scaler = scaler  # type: ignore[attr-defined]
-	return bundle, norm_bundle
+def load_data(filename: str = "whinequalityclean.arff") -> Tuple[DataBundle, DataBundle]:
+    """
+    Loads and normalizes the dataset.
+    
+    Args:
+        filename: Name of the ARFF file in datasets folder.
+        
+    Returns:
+        Tuple of (Raw Bundle, Normalized Bundle).
+    """
+    data_path = Path(__file__).resolve().parent / "datasets" / filename
+    bundle = load_winequality(data_path)
+    norm_bundle, scaler = normalize_bundle(bundle)
+    # Store scaler for later reuse (e.g. in predictions)
+    norm_bundle.scaler = scaler  # type: ignore[attr-defined]
+    return bundle, norm_bundle
 
 
 def build_impls() -> Dict[str, str]:
-	return {
-		"loop": "K-Means (loops)",
-		"numpy": "K-Means (NumPy)",
-		"sklearn": "K-Means (sklearn baseline)",
-	}
+    """Returns the available K-Means implementations mapping."""
+    return {
+        "loop": "K-Means (Python Loops)",
+        "numpy": "K-Means (NumPy Vectorized)",
+        "sklearn": "K-Means (Scikit-Learn Standard)",
+    }
 
 
 def builder_factory(name: str):
-	if name == "loop":
-		return lambda k, seed, verbose=False: KMeansLoop(n_clusters=k, n_init=3, random_state=seed, verbose=verbose)
-	if name == "numpy":
-		return lambda k, seed, verbose=False: KMeansNumpy(n_clusters=k, n_init=3, random_state=seed, verbose=verbose)
-	if name == "sklearn":
-		return lambda k, seed, verbose=False: KMeansSklearn(n_clusters=k, n_init=10, random_state=seed)
-	raise ValueError(f"Implementación no soportada: {name}")
+    """
+    Factory to create KMeans instances.
+    
+    Args:
+        name: Implementation key ('loop', 'numpy', 'sklearn').
+        
+    Returns:
+        A callable that returns a fitted model.
+    """
+    if name == "loop":
+        return lambda k, seed, verbose=False: KMeansLoop(n_clusters=k, n_init=3, random_state=seed, verbose=verbose)
+    if name == "numpy":
+        return lambda k, seed, verbose=False: KMeansNumpy(n_clusters=k, n_init=3, random_state=seed, verbose=verbose)
+    if name == "sklearn":
+        return lambda k, seed, verbose=False: KMeansSklearn(n_clusters=k, n_init=10, random_state=seed)
+    raise ValueError(f"Unsupported implementation: {name}")
 
 
-def run_evaluation(norm_bundle: DataBundle, ks: List[int], impl_keys: List[str], n_runs: int, with_silhouette: bool):
-	builders = {k: builder_factory(k) for k in impl_keys}
-	# evaluate_models expects builder(k, seed). run_evaluation needs to adapt to new factory that accepts verbose.
-	# We'll stick to non-verbose for bulk evaluation.
-	adapted_builders = {
-		k: lambda n_k, s: builder_factory(k)(n_k, s, verbose=False) 
-		for k in impl_keys
-	}
-	results = evaluate_models(
-		norm_bundle.X,
-		ks=ks,
-		builders=adapted_builders,
-		n_runs=n_runs,
-		random_state=42,
-		compute_silhouette=with_silhouette,
-	)
-	rows = []
-	for r in results:
-		rows.append(
-			{
-				"impl": r.impl,
-				"k": r.k,
-				"run": r.run,
-				"inertia": r.inertia,
-				"fit_time": r.fit_time,
-				"n_iter": r.n_iter,
-				"silhouette": r.silhouette,
-			}
-		)
-	df = pd.DataFrame(rows)
-	summary = (
-		df.groupby(["impl", "k"])
-		.agg({"inertia": "mean", "fit_time": "mean", "n_iter": "mean", "silhouette": "mean"})
-		.reset_index()
-	)
-	return df, summary
+def run_evaluation(norm_bundle: DataBundle, ks: List[int], impl_keys: List[str], n_runs: int, with_silhouette: bool) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Runs evaluating benchmarks across multiple K values and implementations.
+    """
+    # Adapt factory to match evaluate_models signature (k, seed) -> model
+    adapted_builders = {
+        k: lambda n_k, s: builder_factory(k)(n_k, s, verbose=False) 
+        for k in impl_keys
+    }
+    
+    results = evaluate_models(
+        norm_bundle.X,
+        ks=ks,
+        builders=adapted_builders,
+        n_runs=n_runs,
+        random_state=42,
+        compute_silhouette=with_silhouette,
+    )
+    
+    rows = []
+    for r in results:
+        rows.append({
+            "Implementación": r.impl,
+            "k": r.k,
+            "Run": r.run,
+            "Inercia": r.inertia,
+            "Tiempo (s)": r.fit_time,
+            "Iteraciones": r.n_iter,
+            "Silhouette": r.silhouette,
+        })
+        
+    df = pd.DataFrame(rows)
+    
+    # Summary statistics
+    summary = (
+        df.groupby(["Implementación", "k"])
+        .agg({"Inercia": "mean", "Tiempo (s)": "mean", "Iteraciones": "mean", "Silhouette": "mean"})
+        .reset_index()
+    )
+    return df, summary
 
 
 def predict_single(impl: str, k: int, sample: np.ndarray, norm_bundle: DataBundle, random_state: int):
-	model = builder_factory(impl)(k, random_state, verbose=False)
-	model.fit(norm_bundle.X)
-	labels = model.predict(sample)
-	distances = np.linalg.norm(model.cluster_centers_ - sample, axis=1)
-	return int(labels[0]), distances, model
+    """
+    Predicts the cluster for a single sample.
+    
+    IMPORTANT: This function retrains the model from scratch every time it is called,
+    as per requirements to demonstrate the algorithm's behavior without caching.
+    """
+    # 1. Instantiate and Train (Fresh)
+    model = builder_factory(impl)(k, random_state, verbose=False)
+    model.fit(norm_bundle.X)
+    
+    # 2. Predict
+    labels = model.predict(sample)
+    distances = np.linalg.norm(model.cluster_centers_ - sample, axis=1)
+    
+    return int(labels[0]), distances, model
 
 
-st.sidebar.header("Datos")
+# --- Sidebar Inputs ---
+st.sidebar.subheader("Selección de Datos")
 dataset_map = {
-	"whinequalityclean.arff": "Limpio (Sin Outliers)",
-	"winequality.arff": "Original (Completo)"
+    "whinequalityclean.arff": "Dataset Limpio (Recomendado)",
+    "winequality.arff": "Dataset Original (Con Outliers)"
 }
 selected_filename = st.sidebar.selectbox(
-	"Seleccionar Dataset",
-	options=list(dataset_map.keys()),
-	format_func=lambda x: dataset_map[x],
-	index=0
+    "Archivo de Origen",
+    options=list(dataset_map.keys()),
+    format_func=lambda x: dataset_map[x],
+    index=0
 )
 
-bundle, norm_bundle = load_data(selected_filename)
-st.sidebar.info(f"Registros: {bundle.X.shape[0]} | Atributos: {bundle.X.shape[1]}")
+# Load Data
+try:
+    with st.spinner("Cargando dataset..."):
+        bundle, norm_bundle = load_data(selected_filename)
+    st.sidebar.success(f"Cargado: {len(bundle.X)} registros, {len(bundle.feature_names)} atributos")
+except Exception as e:
+    st.error(f"Error cargando datos: {e}")
+    st.stop()
 
-st.sidebar.header("Algoritmos")
+
+st.sidebar.subheader("Parámetros Globales")
 impls = build_impls()
 selected_impls = st.sidebar.multiselect(
-	"Comparativa General",
-	options=list(impls.keys()),
-	format_func=lambda k: impls[k],
-	default=list(impls.keys()),
+    "Implementaciones a Comparar",
+    options=list(impls.keys()),
+    format_func=lambda k: impls[k],
+    default=list(impls.keys()),
 )
 
-k_min, k_max = st.sidebar.slider("Rango de k (Comparativa)", 2, 12, (3, 8))
-n_runs = st.sidebar.slider("Corridas por k", 1, 5, 2)
-with_silhouette = st.sidebar.checkbox("Calcular silhouette", value=True)
+k_range = st.sidebar.slider("Rango de Clusters (k)", 2, 12, (3, 8))
+n_runs = st.sidebar.slider("Corridas por Configuración", 1, 5, 2, help="Promediar resultados para mayor robustez.")
+with_silhouette = st.sidebar.checkbox("Calcular Silhouette Score", value=True)
 
-st.markdown("---")
-st.markdown("---")
-st.header("1. Determinación de K óptimo (Método del Codo)")
-st.caption("Esta sección ayuda a identificar la cantidad ideal de clusters ($k$). Busque el punto donde la reducción de la Inercia (error) se estabiliza, formando un 'codo' en el gráfico.")
 
-col_codo1, col_codo2 = st.columns([1, 2])
-with col_codo1:
-    k_elbow_max = st.slider("K máximo para analizar", 5, 30, 15)
-    trigger_elbow = st.button("Calcular Codo")
+# --- Tabs for Main Sections ---
+tab_elbow, tab_compare, tab_predict, tab_debug = st.tabs([
+    "📈 1. Método del Codo", 
+    "📊 2. Comparativa", 
+    "🔮 3. Predicción", 
+    "🛠️ 4. Análisis Detallado"
+])
 
-with col_codo2:
-    if trigger_elbow:
-        with st.spinner("Calculando inercia para rango de k..."):
-            elbow_data = []
-            for k_val in range(1, k_elbow_max + 1):
-                # Use numpy impl for speed, seed 42 for stability
-                model = builder_factory("numpy")(k_val, 42, verbose=False)
-                model.fit(norm_bundle.X)
-                elbow_data.append({"k": k_val, "Inercia (SSE)": model.inertia_})
+# --- 1. Elbow Method ---
+with tab_elbow:
+    st.header("Determinación de K óptimo")
+    st.info("Utilice el **Método del Codo** para identificar el número óptimo de clusters. Busque el punto donde la ganancia de inercia disminuye drásticamente.")
+    
+    col_e1, col_e2 = st.columns([1, 3])
+    with col_e1:
+        k_elbow_max = st.number_input("K Máximo", min_value=5, max_value=50, value=15)
+        trigger_elbow = st.button("Generar Gráfico", type="primary")
+        
+    with col_e2:
+        if trigger_elbow:
+            with st.spinner("Calculando curva de inercia..."):
+                elbow_data = []
+                # Always use NumPy for speed here
+                factory = builder_factory("numpy")
+                
+                progress_bar = st.progress(0)
+                for i, k_val in enumerate(range(1, k_elbow_max + 1)):
+                    model = factory(k_val, 42, verbose=False)
+                    model.fit(norm_bundle.X)
+                    elbow_data.append({"k": k_val, "Inercia": model.inertia_})
+                    progress_bar.progress((i + 1) / k_elbow_max)
+                
+                df_elbow = pd.DataFrame(elbow_data)
+                
+                fig_elbow = px.line(
+                    df_elbow, 
+                    x="k", 
+                    y="Inercia", 
+                    title="Análisis del Codo (Inercia vs k)",
+                    markers=True,
+                    labels={"k": "Número de Clusters (k)", "Inercia": "Suma de Errores al Cuadrado (SSE)"}
+                )
+                fig_elbow.update_layout(xaxis=dict(dtick=1))
+                st.plotly_chart(fig_elbow, use_container_width=True)
+
+# --- 2. Comparison ---
+with tab_compare:
+    st.header("Comparativa de Rendimiento y Calidad")
+    st.markdown("Ejecute múltiples implementaciones para validar que los resultados sean consistentes y comparar tiempos de ejecución.")
+    
+    if st.button("Iniciar Comparativa", key="btn_compare"):
+        if not selected_impls:
+            st.warning("Por favor seleccione al menos una implementación en la barra lateral.")
+        else:
+            ks = list(range(k_range[0], k_range[1] + 1))
+            with st.spinner("Ejecutando benchmarks..."):
+                df_runs, df_summary = run_evaluation(norm_bundle, ks, selected_impls, n_runs, with_silhouette)
             
-            df_elbow = pd.DataFrame(elbow_data)
+            st.success("Evaluación completada con éxito.")
             
-            # Use Plotly for better resolution/interaction
-            import plotly.express as px
-            fig_elbow = px.line(
-                df_elbow, 
-                x="k", 
-                y="Inercia (SSE)", 
-                title="Suma de Errores al Cuadrado vs Numero de Clusters (k)",
-                markers=True,
-                labels={"k": "Número de Clusters (k)", "Inercia (SSE)": "Inercia intra-cluster"}
-            )
-            fig_elbow.update_layout(xaxis=dict(dtick=1)) # Ensure integer ticks for k
-            st.plotly_chart(fig_elbow, use_container_width=True)
+            st.subheader("Resumen Promedio")
+            st.dataframe(df_summary.style.format({"Inercia": "{:.2f}", "Tiempo (s)": "{:.4f}", "Silhouette": "{:.3f}"}), use_container_width=True)
             
-            st.info("Busque el punto de inflexión. Si la curva es suave, considere valores donde la ganancia marginal disminuye (ej. k=5, k=6).")
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                st.markdown("#### Inercia (Menos es mejor)")
+                st.line_chart(df_summary.pivot(index="k", columns="Implementación", values="Inercia"))
+            with col_c2:
+                st.markdown("#### Tiempo de Ejecución (Menos es mejor)")
+                st.line_chart(df_summary.pivot(index="k", columns="Implementación", values="Tiempo (s)"))
+                
+            if with_silhouette:
+                st.markdown("#### Silhouette Score (Más es mejor, -1 a 1)")
+                st.line_chart(df_summary.pivot(index="k", columns="Implementación", values="Silhouette"))
 
-st.markdown("---")
-st.header("2. Comparativa de Implementaciones")
-st.caption("Ejecuta múltiples configuraciones en lote para comparar el rendimiento (Tiempo) y la calidad (Inercia, Silhouette) de las distintas implementaciones (Loops vs NumPy vs Sklearn).")
+# --- 3. Prediction ---
+with tab_predict:
+    st.header("Simulación de Predicción")
+    st.markdown("Simule la llegada de una nueva muestra de vino. El sistema **re-entrenará el modelo** con todo el dataset y clasificará la muestra.")
+    
+    col_p1, col_p2 = st.columns([1, 2])
+    
+    with col_p1:
+        st.subheader("Configuración del Modelo")
+        p_impl = st.selectbox("Algoritmo", list(impls.keys()), format_func=lambda k: impls[k])
+        p_k = st.slider("Número de Clusters (k)", 2, 12, 4, key="pred_k")
+        p_seed = st.number_input("Semilla Aleatoria", value=42, step=1)
+        
+        btn_predict = st.button("Clasificar Muestra", type="primary")
+        
+    with col_p2:
+        st.subheader("Atributos de la Muestra")
+        st.caption("Modifique los valores para definir el nuevo vino.")
+        
+        input_vals = []
+        cols = st.columns(3)
+        for i, name in enumerate(bundle.feature_names):
+            # Default to mean values for convenience
+            default_val = float(np.mean(bundle.X[:, i]))
+            with cols[i % 3]:
+                val = st.number_input(name, value=default_val, format="%.4f")
+                input_vals.append(val)
+                
+    if btn_predict:
+        sample = np.array(input_vals, dtype=np.float64).reshape(1, -1)
+        
+        # Normalize
+        scaler = getattr(norm_bundle, "scaler")
+        sample_norm = scaler.transform(sample)  # type: ignore[assignment]
+        
+        with st.status("Procesando...", expanded=True) as status:
+            st.write("1. Normalizando datos de entrada...")
+            time.sleep(0.3) # UX pause
+            
+            st.write(f"2. Entrenando modelo {impls[p_impl]} con k={p_k} desde cero...")
+            start_t = time.perf_counter()
+            label, distances, model = predict_single(p_impl, p_k, sample_norm, norm_bundle, int(p_seed))
+            end_t = time.perf_counter()
+            st.write(f"Ref: Modelo entrenado en {end_t - start_t:.4f}s")
+            
+            st.write("3. Calculando distancias a centroides finales...")
+            status.update(label="Clasificación Completada", state="complete", expanded=False)
+            
+        # Results
+        col_res1, col_res2 = st.columns([1, 1])
+        with col_res1:
+            st.metric("Cluster Asignado", f"Cluster {label}")
+            st.info(f"El vino ha sido clasificado en el Grupo {label}.")
+            
+        with col_res2:
+            st.markdown(f"**Distancia mínima:** {distances[label]:.4f}")
+            
+        # Distances Table
+        dist_df = pd.DataFrame({
+            "Cluster ID": range(p_k),
+            "Distancia Euclidiana": distances,
+            "Estado": ["✅ Asignado" if i == label else "❌" for i in range(p_k)]
+        })
+        st.table(dist_df.style.highlight_min(subset=["Distancia Euclidiana"], color="#d4edda", axis=0))
 
-if st.button("Ejecutar comparativa"):
-	if not selected_impls:
-		st.warning("Selecciona al menos una implementación.")
-	else:
-		ks = list(range(k_min, k_max + 1))
-		with st.spinner("Corriendo comparativas..."):
-			df_runs, df_summary = run_evaluation(norm_bundle, ks, selected_impls, n_runs, with_silhouette)
-		st.success("Listo")
-		st.write("Resultados por corrida")
-		st.dataframe(df_runs, use_container_width=True)
-
-		st.write("Promedio por implementación y k")
-		st.dataframe(df_summary, use_container_width=True)
-
-		st.write("Inercia vs k (promedio)")
-		inertia_chart = df_summary.pivot(index="k", columns="impl", values="inertia")
-		st.line_chart(inertia_chart)
-
-		st.write("Tiempo de ajuste vs k (s)")
-		time_chart = df_summary.pivot(index="k", columns="impl", values="fit_time")
-		st.line_chart(time_chart)
-
-		if with_silhouette:
-			st.write("Silhouette vs k")
-			sil_chart = df_summary.pivot(index="k", columns="impl", values="silhouette")
-			st.line_chart(sil_chart)
-
-
-st.markdown("---")
-st.markdown("---")
-st.header("3. Predicción de un nuevo registro")
-st.caption("Permite simular la llegada de un nuevo dato (vino) y clasificarlo en uno de los clusters existentes. Muestra el proceso interno de decisión.")
-
-col1, col2 = st.columns(2)
-with col1:
-	impl_pred = st.selectbox("Implementación para predecir", list(impls.keys()), format_func=lambda k: impls[k])
-	k_pred = st.slider("k para predicción", 2, 12, 4)
-	seed_pred = st.number_input("random_state", min_value=0, value=42, step=1)
-
-with col2:
-	st.write("Completa los 11 atributos")
-	feature_vals = []
-	for name in bundle.feature_names:
-		default_val = float(np.mean(bundle.X[:, bundle.feature_names.index(name)]))
-		val = st.number_input(name, value=default_val)
-		feature_vals.append(val)
-
-if st.button("Predecir cluster"):
-	sample = np.array(feature_vals, dtype=np.float64).reshape(1, -1)
-	
-	# Paso 1: Normalización
-	st.markdown("### Paso 1: Normalización")
-	st.info("Los datos se normalizan (Z-Score) para equiparar el peso de todas las variables.")
-	
-	scaler = getattr(norm_bundle, "scaler")
-	sample_norm = scaler.transform(sample)  # type: ignore[assignment]
-	
-	col_n1, col_n2 = st.columns(2)
-	with col_n1:
-		st.write("Input Original:", pd.DataFrame(sample, columns=bundle.feature_names))
-	with col_n2:
-		st.write("Input Normalizado:", pd.DataFrame(sample_norm, columns=bundle.feature_names))
-
-	# Ejecución
-	label, distances, model = predict_single(impl_pred, k_pred, sample_norm, norm_bundle, int(seed_pred))
-
-	# Paso 2: Distancias
-	st.markdown("### Paso 2: Distancias a Centroides")
-	st.info(f"Se calcula la distancia Euclídea contra los {k_pred} centroides obtenida por el modelo.")
-	
-	dist_df = pd.DataFrame({
-		"Cluster": list(range(len(distances))),
-		"Distancia": distances,
-		"Seleccionado": ["SI" if i == label else "NO" for i in range(len(distances))]
-	})
-	st.dataframe(dist_df.style.highlight_min(subset=["Distancia"], color="lightgreen", axis=0), use_container_width=True)
-
-	# Paso 3: Resultado
-	st.markdown("### Paso 3: Decisión Final")
-	st.success(f"Cluster Asignado: {label}")
-	st.write(f"El punto se asigna al Cluster **{label}** porque es el que minimiza la distancia ({distances[label]:.4f}).")
-
-st.markdown("---")
-st.markdown("---")
-st.markdown("---")
-st.markdown("---")
-st.header("4. Análisis y Ejecución Controlada")
-st.caption("Profundice en una configuración específica. Use el **Modo Depuración** para ver paso a paso cómo converge el algoritmo, o el **Modo Rendimiento** para obtener estadísticas robustas y gráficos detallados.")
-
-import contextlib
-import io
-import time
-from src.kmeans_base import compute_inertia
-from sklearn.metrics import silhouette_score
-
-col_viz1, col_viz2 = st.columns([1, 2])
-with col_viz1:
-	viz_impl = st.selectbox("Algoritmo", ["loop", "numpy", "sklearn"], key="viz_impl", format_func=lambda x: impls[x])
-	viz_k = st.slider("k", 2, 10, 4, key="viz_k")
-	viz_mode = st.radio("Modo de Ejecución", ["Rendimiento", "Depuración"], key="viz_mode")
-	viz_seed = st.number_input("Semilla", value=42, key="viz_seed")
-	
-	run_btn = st.button("Ejecutar Análisis")
-
-with col_viz2:
-	if run_btn:
-		if viz_mode == "Depuración":
-			st.markdown("### Salida de Depuración")
-			log_capture = io.StringIO()
-			
-			with st.spinner("Ejecutando paso a paso..."):
-				with contextlib.redirect_stdout(log_capture):
-					# Debug run: verbose=True, n_init=1 (to avoid noise)
-					start_t = time.perf_counter()
-					# Factory signature is (k, seed, verbose)
-					model = builder_factory(viz_impl)(viz_k, int(viz_seed), verbose=True)
-					# Force n_init to 1 for clearer logs in debug
-					if hasattr(model, 'n_init'):
-						model.n_init = 1
-						print(f"[Debug] Configured n_init=1 for transparency.")
-					
-					model.fit(norm_bundle.X)
-					end_t = time.perf_counter()
-					print(f"[Done] Fit time: {end_t - start_t:.4f}s")
-			
-			st.code(log_capture.getvalue(), language="text")
-			
-			st.success("Modelo Ajustado")
-			
-			# Metrics
-			inertia = getattr(model, "inertia_", 0.0)
-			sil = silhouette_score(norm_bundle.X, model.labels_) if len(set(model.labels_)) > 1 else -1
-			
-			m1, m2, m3 = st.columns(3)
-			m1.metric("Tiempo", f"{end_t - start_t:.4f}s")
-			m1.metric("Inercia (SSE)", f"{inertia:.2f}")
-			m3.metric("Silhouette", f"{sil:.3f}")
-			
-			# Quick Visuals
-			tab_pca, tab_radar = st.tabs(["Mapa PCA", "Radar Centroides"])
-			with tab_pca:
-				st.plotly_chart(plot_pca_2d(norm_bundle.X, model.labels_), use_container_width=True)
-			with tab_radar:
-				st.plotly_chart(plot_radar_centroids(model.cluster_centers_, bundle.feature_names), use_container_width=True)
-				
-		else: # Modo Rendimiento
-			st.markdown("### Estadísticas de Rendimiento")
-			N_Perf_Runs = 5
-			with st.spinner(f"Ejecutando {N_Perf_Runs} corridas para promediar..."):
-				inertias = []
-				times = []
-				sils = []
-				
-				best_model = None
-				min_inertia = float('inf')
-				
-				for i in range(N_Perf_Runs):
-					seed = int(viz_seed) + i
-					t0 = time.perf_counter()
-					model = builder_factory(viz_impl)(viz_k, seed, verbose=False)
-					model.fit(norm_bundle.X)
-					t1 = time.perf_counter()
-					
-					inertias.append(model.inertia_)
-					times.append(t1 - t0)
-					if len(set(model.labels_)) > 1:
-						sils.append(silhouette_score(norm_bundle.X, model.labels_))
-					else:
-						sils.append(-1.0)
-						
-					if model.inertia_ < min_inertia:
-						min_inertia = model.inertia_
-						best_model = model
-				
-				# Display Stats
-				df_stats = pd.DataFrame({
-					"Métrica": ["Tiempo Medio", "Inercia Media", "Silhouette Medio"],
-					"Valor": [np.mean(times), np.mean(inertias), np.mean(sils)],
-					"Desvío": [np.std(times), np.std(inertias), np.std(sils)]
-				})
-				st.dataframe(df_stats)
-				
-				# Best Model Visuals
-				st.write("#### Visualización del mejor modelo hallado")
-				tab_pca, tab_radar = st.tabs(["Mapa PCA", "Radar Centroides"])
-				with tab_pca:
-					st.plotly_chart(plot_pca_2d(norm_bundle.X, best_model.labels_), use_container_width=True)
-				with tab_radar:
-					st.plotly_chart(plot_radar_centroids(best_model.cluster_centers_, bundle.feature_names), use_container_width=True)
+# --- 4. Deep Analysis ---
+with tab_debug:
+    st.header("Análisis y Depuración")
+    st.markdown("Ejecución paso a paso para visualizar la convergencia del algoritmo.")
+    
+    col_d1, col_d2 = st.columns([1, 2])
+    
+    with col_d1:
+        d_impl = st.selectbox("Algoritmo", ["loop", "numpy", "sklearn"], key="d_impl", format_func=lambda x: impls[x])
+        d_k = st.slider("k", 2, 10, 4, key="d_k")
+        d_mode = st.radio("Modo", ["Depuración (Logs)", "Rendimiento (Stats)"])
+        d_seed = st.number_input("Semilla", value=42, key="d_seed")
+        d_run = st.button("Ejecutar")
+        
+    with col_d2:
+        if d_run:
+            if d_mode == "Depuración (Logs)":
+                st.markdown("#### Logs de Ejecución")
+                log_capture = io.StringIO()
+                
+                with st.spinner("Ejecutando..."):
+                    with contextlib.redirect_stdout(log_capture):
+                        # Force verbose=True
+                        model = builder_factory(d_impl)(d_k, int(d_seed), verbose=True)
+                        # Quick hack to force 1 run for cleaner logs if supported
+                        if hasattr(model, 'n_init'):
+                            model.n_init = 1
+                            print("[Debug] n_init forzado a 1 para limpieza de logs.")
+                        
+                        t0 = time.perf_counter()
+                        model.fit(norm_bundle.X)
+                        t1 = time.perf_counter()
+                        print(f"\n[Finalizado] Tiempo total: {t1 - t0:.4f}s")
+                
+                st.text_area("Salida del Algoritmo", log_capture.getvalue(), height=300)
+                
+                # Visualizations
+                st.subheader("Visualización del Resultado")
+                t_pca, t_radar = st.tabs(["PCA 2D", "Radar"])
+                with t_pca:
+                    st.plotly_chart(plot_pca_2d(norm_bundle.X, model.labels_), use_container_width=True)
+                with t_radar:
+                    st.plotly_chart(plot_radar_centroids(model.cluster_centers_, bundle.feature_names), use_container_width=True)
+                    
+            else: # Stats Mode
+                st.markdown("#### Estadísticas de Estabilidad")
+                N_STATS = 5
+                inertias, times, sils = [], [], []
+                
+                progress = st.progress(0)
+                for i in range(N_STATS):
+                    s = int(d_seed) + i
+                    t0 = time.perf_counter()
+                    m = builder_factory(d_impl)(d_k, s, verbose=False)
+                    m.fit(norm_bundle.X)
+                    t1 = time.perf_counter()
+                    
+                    inertias.append(m.inertia_)
+                    times.append(t1 - t0)
+                    if len(set(m.labels_)) > 1:
+                        sils.append(silhouette_score(norm_bundle.X, m.labels_))
+                    else:
+                        sils.append(-1)
+                    progress.progress((i+1)/N_STATS)
+                
+                st.success("Completado.")
+                
+                met_df = pd.DataFrame({
+                    "Métrica": ["Tiempo", "Inercia", "Silhouette"],
+                    "Promedio": [np.mean(times), np.mean(inertias), np.mean(sils)],
+                    "Desviación Std": [np.std(times), np.std(inertias), np.std(sils)]
+                })
+                st.dataframe(met_df)

@@ -7,7 +7,19 @@ from .utils import ensure_rng
 
 
 class KMeansLoop:
-    """K-Means implementation using explicit Python loops."""
+    """
+    Implementación de K-Means utilizando bucles explícitos de Python (sin vectorizar).
+    
+    ¿Por qué esta implementación?
+    ---------------------------
+    Se incluye para cumplir estrictamente con los requisitos académicos de demostrar
+    la lógica del algoritmo de forma manual ("a pie").
+    
+    Comparativa:
+    - vs KMeansNumpy: Esta versión es extremadamente lenta (`O(N*K*D)` en Python puro)
+      y no debe usarse en producción. Su único propósito es educativo y de depuración
+      para visualizar claramente los pasos internos sin la abstracción de NumPy.
+    """
 
     def __init__(self, n_clusters: int, max_iter: int = 300, tol: float = 1e-4, n_init: int = 1, random_state: int | None = None, verbose: bool = False) -> None:
         if n_clusters <= 0:
@@ -24,7 +36,30 @@ class KMeansLoop:
         self.inertia_: float | None = None
         self.n_iter_: int | None = None
 
+    @property
+    def cluster_centers(self) -> np.ndarray:
+        """Devuelve las coordenadas de los centros de los clusters."""
+        if self.cluster_centers_ is None:
+            raise RuntimeError("El modelo no ha sido ajustado (fitted).")
+        return self.cluster_centers_
+
+    @property
+    def labels(self) -> np.ndarray:
+        """Devuelve las etiquetas de cada punto."""
+        if self.labels_ is None:
+            raise RuntimeError("El modelo no ha sido ajustado (fitted).")
+        return self.labels_
+
     def fit(self, X: np.ndarray) -> "KMeansLoop":
+        """
+        Calcula el clustering K-means utilizando bucles explícitos (no vectorizado).
+
+        Args:
+            X: Array-like de forma (n_samples, n_features).
+
+        Returns:
+            self: El estimador ajustado.
+        """
         X = np.asarray(X, dtype=np.float64)
         best_inertia = np.inf
         best_centers = None
@@ -48,6 +83,16 @@ class KMeansLoop:
         return self
 
     def _run_single(self, X: np.ndarray, seed: int):
+        """
+        Ejecuta una única iteración del algoritmo K-Means.
+        
+        Args:
+            X: Datos de entrada.
+            seed: Semilla aleatoria para esta ejecución.
+            
+        Returns:
+            Tupla de (centros, etiquetas, inercia, n_iter).
+        """
         rng = ensure_rng(seed)
         n_samples = X.shape[0]
         indices = rng.choice(n_samples, size=self.n_clusters, replace=False)
@@ -65,18 +110,24 @@ class KMeansLoop:
             if self.verbose:
                 # Calculate inertia for logging (expensive but useful for debug)
                 current_inertia = compute_inertia(X, new_centers, labels)
-                print(f"[Loop] Iter {iteration+1}: shift={shift:.6f}, inertia={current_inertia:.4f}")
+                print(f"[Loop] Iter {iteration+1}: desplazamiento={shift:.6f}, inercia={current_inertia:.4f}")
 
             centers = new_centers
             if shift <= self.tol:
                 if self.verbose:
-                    print(f"[Loop] Converged at iter {iteration+1}")
+                    print(f"[Loop] Convergencia en iter {iteration+1}")
                 break
 
         inertia = compute_inertia(X, centers, labels)
         return centers, labels, inertia, iteration + 1
 
     def _assign_labels(self, X: np.ndarray, centers: np.ndarray) -> np.ndarray:
+        """
+        Asigna cada muestra al centroide más cercano utilizando bucles explícitos.
+        
+        Esta función itera muestra por muestra y centroide por centroide, lo cual es ineficiente
+        en Python pero muy claro para entender la lógica algorítmica.
+        """
         n_samples = X.shape[0]
         labels = np.zeros(n_samples, dtype=np.int32)
         for i in range(n_samples):
@@ -91,6 +142,7 @@ class KMeansLoop:
         return labels
 
     def _recompute_centers(self, X: np.ndarray, labels: np.ndarray):
+        """Recalcula los centroides como el promedio de los puntos asignados usando bucles."""
         centers = np.zeros((self.n_clusters, X.shape[1]), dtype=np.float64)
         counts = np.zeros(self.n_clusters, dtype=np.int32)
         for idx, label in enumerate(labels):
@@ -106,6 +158,9 @@ class KMeansLoop:
         return centers, empty_clusters
 
     def _fix_empty_clusters(self, X: np.ndarray, centers: np.ndarray, labels: np.ndarray, rng: np.random.Generator) -> None:
+        """
+        Maneja clusters vacíos reasignando el centroide al punto más lejano.
+        """
         distances = np.zeros(X.shape[0], dtype=np.float64)
         for i in range(X.shape[0]):
             c_idx = labels[i]
@@ -117,10 +172,20 @@ class KMeansLoop:
             labels[farthest_idx] = c_idx
 
     def predict(self, X: np.ndarray) -> np.ndarray:
+        """
+        Predice el cluster más cercano utilizando el modelo ajustado.
+
+        Args:
+            X: Nuevos datos a predecir.
+
+        Returns:
+            Etiquetas de cluster.
+        """
         if self.cluster_centers_ is None:
-            raise RuntimeError("Model not fitted.")
+            raise RuntimeError("El modelo no ha sido ajustado (fitted).")
         X = np.asarray(X, dtype=np.float64)
         return self._assign_labels(X, self.cluster_centers_)
 
     def fit_predict(self, X: np.ndarray) -> np.ndarray:
+        """Calcula los centros de los clusters y predice el índice del cluster para cada muestra."""
         return self.fit(X).labels_
