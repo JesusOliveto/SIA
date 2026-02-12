@@ -37,5 +37,22 @@ Este documento detalla secuencialmente las intervenciones realizadas en el proye
     - **Consistencia:** Se unificó el uso de `random_state` y se mejoró el manejo de `verbose`.
 
 
+## 9. Limpieza de Datos (Data Cleaning)
+- **Objetivo:** Mejorar la calidad del dataset eliminando outliers para obtener resultados de clustering más significativos.
+- **Acción:**
+    - Se creó el script `clean_data.py`.
+    - Se implementó un filtro basado en el **Rango Intercuartílico (IQR)** para detectar y eliminar valores atípicos en las variables numéricas.
+    - Se generó un nuevo archivo `whinequalityclean.arff` con los datos depurados.
+    - Se actualizó `app.py` para cargar el nuevo dataset por defecto, mejorando la calidad de los gráficos y métricas.
+
+## 10. Mejoras en la Interfaz de Usuario (UI)
+- **Objetivo:** Mejorar la experiencia del usuario y la presentación visual de los resultados.
+- **Acción:**
+    - Se eliminaron los gráficos de barras de "Iteraciones" y "Tiempo" debido a su irrelevancia para el análisis de clustering.
+    - Se implementó un nuevo gráfico interactivo de **Distribución de Calidad** para el dataset limpio, permitiendo visualizar la distribución de las etiquetas de calidad.
+    - Se mejoró la presentación de los resultados de evaluación, ocultando las columnas "Iteraciones" y "Tiempo" de la tabla resumen para mayor claridad.
+
+
+
 ---
 **Estado Final:** El proyecto cumple con todos los requerimientos académicos y técnicos.

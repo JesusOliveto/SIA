@@ -103,6 +103,7 @@ def run_evaluation(norm_bundle: DataBundle, ks: List[int], impl_keys: List[str],
         n_runs=n_runs,
         random_state=42,
         compute_silhouette=with_silhouette,
+        y_true=norm_bundle.y
     )
     
     rows = []
@@ -115,14 +116,22 @@ def run_evaluation(norm_bundle: DataBundle, ks: List[int], impl_keys: List[str],
             "Tiempo (s)": r.fit_time,
             "Iteraciones": r.n_iter,
             "Silhouette": r.silhouette,
+            "ARI": r.ari,
+            "NMI": r.nmi
         })
         
     df = pd.DataFrame(rows)
     
     # Summary statistics
+    # Filter out None columns mainly for ARI/NMI if strictly not present (but they should be None if not computed)
+    agg_dict = {"Inercia": "mean", "Tiempo (s)": "mean", "Iteraciones": "mean", "Silhouette": "mean"}
+    if norm_bundle.y is not None:
+        agg_dict["ARI"] = "mean"
+        agg_dict["NMI"] = "mean"
+        
     summary = (
         df.groupby(["Implementación", "k"])
-        .agg({"Inercia": "mean", "Tiempo (s)": "mean", "Iteraciones": "mean", "Silhouette": "mean"})
+        .agg(agg_dict)
         .reset_index()
     )
     return df, summary
@@ -247,36 +256,58 @@ with tab_compare:
             st.markdown(
                 """
                 **Interpretación de Métricas:**
-                - **Inercia (SSE):** Mide la cohesión interna de los clusters. Valores más bajos indican clusters más compactos.
-                - **Silhouette:** Mide qué tan bien definidos están los clusters (-1 a 1). Valores cercanos a 1 son mejores.
-                - **Tiempo:** Tiempo de entrenamiento en segundos. Muestra la eficiencia del algoritmo.
+                - **Inercia (SSE):** Cohesión interna (Menor es mejor).
+                - **Silhouette:** Definición de clusters (-1 a 1, Mayor es mejor).
+                - **ARI (Adjusted Rand Index):** Coincidencia con la calidad real del vino (0 a 1, Mayor es mejor). Mide la utilidad real.
+                - **Tiempo:** Eficiencia computacional.
                 """
             )
 
-            # Highlighting and Formatting
+            # Format config
+            fmt_dict = {
+                "Inercia": "{:.2f}", 
+                "Tiempo (s)": "{:.6f}", 
+                "Silhouette": "{:.3f}",
+                "Iteraciones": "{:.1f}"
+            }
+            if "ARI" in df_summary.columns:
+                fmt_dict["ARI"] = "{:.3f}"
+            if "NMI" in df_summary.columns:
+                fmt_dict["NMI"] = "{:.3f}"
+
+            # Highlighting
             st.dataframe(
-                df_summary.style.format({
-                    "Inercia": "{:.2f}", 
-                    "Tiempo (s)": "{:.6f}", 
-                    "Silhouette": "{:.3f}",
-                    "Iteraciones": "{:.1f}"
-                }).background_gradient(subset=["Tiempo (s)"], cmap="RdYlGn_r")  # Red for slow, Green for fast
-                  .background_gradient(subset=["Inercia"], cmap="Blues_r")
-                  .highlight_max(subset=["Silhouette"], color="#d4edda"),
+                df_summary.style.format(fmt_dict)
+                .background_gradient(subset=["Tiempo (s)"], cmap="RdYlGn_r")
+                .background_gradient(subset=["Inercia"], cmap="Blues_r")
+                .highlight_max(subset=["Silhouette"], color="#d4edda"),
                 use_container_width=True
             )
             
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                st.markdown("#### Inercia (Menos es mejor)")
-                st.line_chart(df_summary.pivot(index="k", columns="Implementación", values="Inercia"))
-            with col_c2:
-                st.markdown("#### Tiempo de Ejecución (Menos es mejor)")
+            # Graphs
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("#### Tiempo de Ejecución vs K")
                 st.line_chart(df_summary.pivot(index="k", columns="Implementación", values="Tiempo (s)"))
                 
-            if with_silhouette:
-                st.markdown("#### Silhouette Score (Más es mejor, -1 a 1)")
-                st.line_chart(df_summary.pivot(index="k", columns="Implementación", values="Silhouette"))
+                if "numpy" in selected_impls and "loop" in selected_impls:
+                    # Speedup Calculation
+                    np_times = df_summary[df_summary["Implementación"] == "numpy"].set_index("k")["Tiempo (s)"]
+                    loop_times = df_summary[df_summary["Implementación"] == "loop"].set_index("k")["Tiempo (s)"]
+                    speedup = loop_times / np_times
+                    
+                    st.markdown("#### Speedup (Loop / Numpy)")
+                    st.bar_chart(speedup)
+                    st.caption("Factor de aceleración: Cuántas veces más rápido es NumPy vs Python Loops.")
+
+            with c2:
+                if "ARI" in df_summary.columns:
+                    st.markdown("#### Validación Externa (ARI) vs K")
+                    st.line_chart(df_summary.pivot(index="k", columns="Implementación", values="ARI"))
+                    st.caption("¿Los clusters coinciden con la calidad del vino? (ARI > 0 indica correlación)")
+                else:
+                    st.markdown("#### Inercia vs K")
+                    st.line_chart(df_summary.pivot(index="k", columns="Implementación", values="Inercia"))
 
 # --- 3. Prediction ---
 with tab_predict:
@@ -345,74 +376,67 @@ with tab_predict:
 
 # --- 4. Deep Analysis ---
 with tab_debug:
-    st.header("Análisis y Depuración")
-    st.markdown("Ejecución paso a paso para visualizar la convergencia del algoritmo.")
+    st.header("Interpretación y Depuración")
     
     col_d1, col_d2 = st.columns([1, 2])
     
     with col_d1:
+        st.markdown("##### Configuración")
         d_impl = st.selectbox("Algoritmo", ["loop", "numpy", "sklearn"], key="d_impl", format_func=lambda x: impls[x])
         d_k = st.slider("k", 2, 10, 4, key="d_k")
-        d_mode = st.radio("Modo", ["Depuración (Logs)", "Rendimiento (Stats)"])
         d_seed = st.number_input("Semilla", value=42, key="d_seed")
-        d_run = st.button("Ejecutar")
+        
+        st.markdown("##### Modo")
+        d_mode = st.radio("Tipo de Análisis", ["Perfilado (Heatmap)", "Depuración (Logs)"])
+        d_run = st.button("Ejecutar Análisis")
         
     with col_d2:
         if d_run:
             if d_mode == "Depuración (Logs)":
-                st.markdown("#### Logs de Ejecución")
+                st.markdown("#### Logs de Ejecución Paso a Paso")
                 log_capture = io.StringIO()
                 
-                with st.spinner("Ejecutando..."):
+                with st.spinner("Ejecutando con logging activado..."):
                     with contextlib.redirect_stdout(log_capture):
-                        # Force verbose=True
                         model = builder_factory(d_impl)(d_k, int(d_seed), verbose=True)
-                        # Quick hack to force 1 run for cleaner logs if supported
                         if hasattr(model, 'n_init'):
                             model.n_init = 1
-                            print("[Debug] n_init forzado a 1 para limpieza de logs.")
                         
-                        t0 = time.perf_counter()
                         model.fit(norm_bundle.X)
-                        t1 = time.perf_counter()
-                        print(f"\n[Finalizado] Tiempo total: {t1 - t0:.4f}s")
+
+                st.text_area("Traza del Algoritmo", log_capture.getvalue(), height=400)
                 
-                st.text_area("Salida del Algoritmo", log_capture.getvalue(), height=300)
-                
-                # Visualizations
-                st.subheader("Visualización del Resultado")
-                t_pca, t_radar = st.tabs(["PCA 2D", "Radar"])
+            else: # Stats/Profiling Mode
+                st.markdown("#### Perfilado de Clusters (Heatmap)")
+                with st.spinner("Generando mapa de calor..."):
+                    model = builder_factory(d_impl)(d_k, int(d_seed), verbose=False)
+                    model.fit(norm_bundle.X)
+                    
+                    # Create Heatmap Data
+                    centers = model.cluster_centers_
+                    feat_names = bundle.feature_names
+                    
+                    # Z-score centers are hard to interpret directly, but show relative differences
+                    # Let's visualize them directly as they represent z-scores (deviations from mean)
+                    
+                    df_centers = pd.DataFrame(centers, columns=feat_names)
+                    df_centers.index.name = "Cluster"
+                    
+                    fig_heat = px.imshow(
+                        df_centers,
+                        labels=dict(x="Característica", y="Cluster", color="Z-Score"),
+                        x=feat_names,
+                        y=[f"Cluster {i}" for i in range(d_k)],
+                        color_continuous_scale="RdBu_r",
+                        aspect="auto",
+                        title="Mapa de Calor de Centroides (Desviación Estándar)"
+                    )
+                    st.plotly_chart(fig_heat, use_container_width=True)
+                    st.caption("Colores Rojos indican valores por encima del promedio. Azules indican por debajo.")
+                    
+                st.markdown("#### Visualización Espacial")
+                t_pca, t_radar = st.tabs(["PCA 2D", "Radar Chart"])
                 with t_pca:
                     st.plotly_chart(plot_pca_2d(norm_bundle.X, model.labels_), use_container_width=True)
                 with t_radar:
                     st.plotly_chart(plot_radar_centroids(model.cluster_centers_, bundle.feature_names), use_container_width=True)
-                    
-            else: # Stats Mode
-                st.markdown("#### Estadísticas de Estabilidad")
-                N_STATS = 5
-                inertias, times, sils = [], [], []
-                
-                progress = st.progress(0)
-                for i in range(N_STATS):
-                    s = int(d_seed) + i
-                    t0 = time.perf_counter()
-                    m = builder_factory(d_impl)(d_k, s, verbose=False)
-                    m.fit(norm_bundle.X)
-                    t1 = time.perf_counter()
-                    
-                    inertias.append(m.inertia_)
-                    times.append(t1 - t0)
-                    if len(set(m.labels_)) > 1:
-                        sils.append(silhouette_score(norm_bundle.X, m.labels_))
-                    else:
-                        sils.append(-1)
-                    progress.progress((i+1)/N_STATS)
-                
-                st.success("Completado.")
-                
-                met_df = pd.DataFrame({
-                    "Métrica": ["Tiempo", "Inercia", "Silhouette"],
-                    "Promedio": [np.mean(times), np.mean(inertias), np.mean(sils)],
-                    "Desviación Std": [np.std(times), np.std(inertias), np.std(sils)]
-                })
-                st.dataframe(met_df)

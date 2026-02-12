@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional
 
 import numpy as np
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score, silhouette_score
 
 from .kmeans_base import KMeansLike
 
@@ -20,6 +20,8 @@ class RunResult:
     n_iter: int
     labels: np.ndarray
     silhouette: Optional[float] = None
+    ari: Optional[float] = None
+    nmi: Optional[float] = None
 
 
 def evaluate_models(
@@ -29,6 +31,7 @@ def evaluate_models(
     n_runs: int = 3,
     random_state: Optional[int] = None,
     compute_silhouette: bool = False,
+    y_true: Optional[np.ndarray] = None,
 ) -> List[RunResult]:
     """Run multiple K selections and implementations, returning comparable metrics."""
 
@@ -42,12 +45,23 @@ def evaluate_models(
                 start = time.perf_counter()
                 model.fit(X)
                 elapsed = time.perf_counter() - start
+                
                 sil_val = None
                 if compute_silhouette and k > 1:
                     try:
-                        sil_val = float(silhouette_score(X, model.labels_))
+                        if len(np.unique(model.labels_)) > 1:
+                            sil_val = float(silhouette_score(X, model.labels_))
+                        else:
+                            sil_val = -1.0
                     except Exception:
                         sil_val = None
+                
+                ari_val = None
+                nmi_val = None
+                if y_true is not None:
+                    ari_val = float(adjusted_rand_score(y_true, model.labels_))
+                    nmi_val = float(normalized_mutual_info_score(y_true, model.labels_))
+
                 results.append(
                     RunResult(
                         impl=name,
@@ -58,6 +72,8 @@ def evaluate_models(
                         n_iter=model.n_iter_,
                         labels=model.labels_,
                         silhouette=sil_val,
+                        ari=ari_val,
+                        nmi=nmi_val,
                     )
                 )
     return results
