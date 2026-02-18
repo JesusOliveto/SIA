@@ -22,7 +22,7 @@ from src.evaluation import evaluate_models
 from src.kmeans_loop import KMeansLoop
 from src.kmeans_numpy import KMeansNumpy
 from src.kmeans_sklearn import KMeansSklearn
-from src.visualization import plot_pca_2d, plot_radar_centroids
+from src.visualization import plot_pca_2d, plot_radar_centroids, plot_scatter_2d, plot_scatter_3d
 
 
 st.set_page_config(
@@ -191,14 +191,67 @@ k_range = st.sidebar.slider("Rango de Clusters (k)", 2, 12, (3, 8))
 n_runs = st.sidebar.slider("Corridas por Configuración", 1, 5, 2, help="Promediar resultados para mayor robustez.")
 with_silhouette = st.sidebar.checkbox("Calcular Silhouette Score", value=True)
 
+st.sidebar.subheader("Selección de Atributos")
+selected_features = st.sidebar.multiselect(
+    "Atributos a utilizar en el algoritmo",
+    options=bundle.feature_names,
+    default=bundle.feature_names,
+    help="Seleccione al menos 2 atributos. Con 2 o 3 se graficará directamente; con más se usará PCA."
+)
+
+if len(selected_features) < 2:
+    st.sidebar.error("⚠️ Seleccione al menos 2 atributos.")
+
+# Compute filtered data based on selected features
+feature_indices = [bundle.feature_names.index(f) for f in selected_features]
+X_selected = norm_bundle.X[:, feature_indices] if feature_indices else norm_bundle.X
+feature_names_selected = selected_features if selected_features else bundle.feature_names
+
 
 # --- Tabs for Main Sections ---
-tab_elbow, tab_compare, tab_predict, tab_debug = st.tabs([
-    "1. Método del Codo", 
-    "2. Comparativa", 
-    "3. Predicción", 
+tab_explore, tab_elbow, tab_compare, tab_predict, tab_debug = st.tabs([
+    "0. Explorador de Datos",
+    "1. Método del Codo",
+    "2. Comparativa",
+    "3. Predicción",
     "4. Análisis Detallado"
 ])
+
+# --- 0. Data Explorer ---
+with tab_explore:
+    st.header("Explorador de Datos")
+    st.markdown("Inspeccione los datos antes de ejecutar el algoritmo. Cambie entre la vista cruda y normalizada para verificar el pre-procesamiento.")
+
+    view_mode = st.radio("Vista", ["Datos Crudos", "Datos Normalizados"], horizontal=True)
+
+    if view_mode == "Datos Crudos":
+        df_view = pd.DataFrame(bundle.X, columns=bundle.feature_names)
+        st.caption(f"Mostrando datos originales — {len(df_view)} registros, {len(bundle.feature_names)} atributos")
+    else:
+        df_view = pd.DataFrame(norm_bundle.X, columns=bundle.feature_names)
+        st.caption(f"Mostrando datos normalizados (Z-Score) — {len(df_view)} registros, {len(bundle.feature_names)} atributos")
+
+    st.dataframe(df_view, use_container_width=True, height=280)
+
+    col_stats1, col_stats2 = st.columns([2, 1])
+
+    with col_stats1:
+        st.subheader("Estadísticas Descriptivas")
+        st.dataframe(
+            df_view.describe().T.style.format("{:.4f}"),
+            use_container_width=True
+        )
+
+    with col_stats2:
+        st.subheader("Atributo Individual")
+        selected_attr = st.selectbox("Seleccionar atributo", options=bundle.feature_names)
+        if selected_attr:
+            col_data = df_view[selected_attr]
+            st.metric("Nombre", selected_attr)
+            st.metric("Mínimo", f"{col_data.min():.5f}")
+            st.metric("Máximo", f"{col_data.max():.5f}")
+            st.metric("Media", f"{col_data.mean():.5f}")
+            st.metric("Desv. Estándar", f"{col_data.std():.5f}")
 
 # --- 1. Elbow Method ---
 with tab_elbow:
@@ -212,15 +265,18 @@ with tab_elbow:
         
     with col_e2:
         if trigger_elbow:
-            with st.spinner("Calculando curva de inercia..."):
+            if len(selected_features) < 2:
+                st.warning("Seleccione al menos 2 atributos en el sidebar para continuar.")
+            else:
+              with st.spinner("Calculando curva de inercia..."):
                 elbow_data = []
                 # Always use NumPy for speed here
                 factory = builder_factory("numpy")
-                
+
                 progress_bar = st.progress(0)
                 for i, k_val in enumerate(range(1, k_elbow_max + 1)):
                     model = factory(k_val, 42, verbose=False)
-                    model.fit(norm_bundle.X)
+                    model.fit(X_selected)
                     elbow_data.append({"k": k_val, "Inercia": model.inertia_})
                     progress_bar.progress((i + 1) / k_elbow_max)
                 
@@ -246,9 +302,15 @@ with tab_compare:
         if not selected_impls:
             st.warning("Por favor seleccione al menos una implementación en la barra lateral.")
         else:
-            ks = list(range(k_range[0], k_range[1] + 1))
-            with st.spinner("Ejecutando benchmarks..."):
-                df_runs, df_summary = run_evaluation(norm_bundle, ks, selected_impls, n_runs, with_silhouette)
+            if len(selected_features) < 2:
+                st.warning("Seleccione al menos 2 atributos en el sidebar para continuar.")
+            else:
+              ks = list(range(k_range[0], k_range[1] + 1))
+              # Use a temporary norm_bundle slice for evaluation
+              import dataclasses
+              norm_bundle_sel = dataclasses.replace(norm_bundle, X=X_selected, feature_names=feature_names_selected)
+              with st.spinner("Ejecutando benchmarks..."):
+                df_runs, df_summary = run_evaluation(norm_bundle_sel, ks, selected_impls, n_runs, with_silhouette)
             
             st.success("Evaluación completada con éxito.")
             
@@ -338,41 +400,48 @@ with tab_predict:
                 input_vals.append(val)
                 
     if btn_predict:
-        sample = np.array(input_vals, dtype=np.float64).reshape(1, -1)
+        if len(selected_features) < 2:
+            st.warning("Seleccione al menos 2 atributos en el sidebar para continuar.")
+        else:
+          sample = np.array(input_vals, dtype=np.float64).reshape(1, -1)
+
+          # Normalize
+          scaler = getattr(norm_bundle, "scaler")
+          sample_norm = scaler.transform(sample)  # type: ignore[assignment]
+          sample_norm = sample_norm[:, feature_indices]
         
-        # Normalize
-        scaler = getattr(norm_bundle, "scaler")
-        sample_norm = scaler.transform(sample)  # type: ignore[assignment]
-        
-        with st.status("Procesando...", expanded=True) as status:
-            st.write("1. Normalizando datos de entrada...")
-            time.sleep(0.3) # UX pause
-            
-            st.write(f"2. Entrenando modelo {impls[p_impl]} con k={p_k} desde cero...")
-            start_t = time.perf_counter()
-            label, distances, model = predict_single(p_impl, p_k, sample_norm, norm_bundle, int(p_seed))
-            end_t = time.perf_counter()
-            st.write(f"Ref: Modelo entrenado en {end_t - start_t:.4f}s")
-            
-            st.write("3. Calculando distancias a centroides finales...")
-            status.update(label="Clasificación Completada", state="complete", expanded=False)
-            
-        # Results
-        col_res1, col_res2 = st.columns([1, 1])
-        with col_res1:
-            st.metric("Cluster Asignado", f"Cluster {label}")
-            st.info(f"El vino ha sido clasificado en el Grupo {label}.")
-            
-        with col_res2:
-            st.markdown(f"**Distancia mínima:** {distances[label]:.4f}")
-            
-        # Distances Table
-        dist_df = pd.DataFrame({
-            "Cluster ID": range(p_k),
-            "Distancia Euclidiana": distances,
-            "Estado": ["ASIGNADO" if i == label else "-" for i in range(p_k)]
-        })
-        st.table(dist_df.style.highlight_min(subset=["Distancia Euclidiana"], color="#d4edda", axis=0))
+          import dataclasses
+          norm_bundle_pred = dataclasses.replace(norm_bundle, X=X_selected, feature_names=feature_names_selected)
+
+          with st.status("Procesando...", expanded=True) as status:
+              st.write("1. Normalizando datos de entrada...")
+              time.sleep(0.3) # UX pause
+
+              st.write(f"2. Entrenando modelo {impls[p_impl]} con k={p_k} desde cero...")
+              start_t = time.perf_counter()
+              label, distances, model = predict_single(p_impl, p_k, sample_norm, norm_bundle_pred, int(p_seed))
+              end_t = time.perf_counter()
+              st.write(f"Ref: Modelo entrenado en {end_t - start_t:.4f}s")
+
+              st.write("3. Calculando distancias a centroides finales...")
+              status.update(label="Clasificación Completada", state="complete", expanded=False)
+
+          # Results
+          col_res1, col_res2 = st.columns([1, 1])
+          with col_res1:
+              st.metric("Cluster Asignado", f"Cluster {label}")
+              st.info(f"El vino ha sido clasificado en el Grupo {label}.")
+
+          with col_res2:
+              st.markdown(f"**Distancia mínima:** {distances[label]:.4f}")
+
+          # Distances Table
+          dist_df = pd.DataFrame({
+              "Cluster ID": range(p_k),
+              "Distancia Euclidiana": distances,
+              "Estado": ["ASIGNADO" if i == label else "-" for i in range(p_k)]
+          })
+          st.table(dist_df.style.highlight_min(subset=["Distancia Euclidiana"], color="#d4edda", axis=0))
 
 # --- 4. Deep Analysis ---
 with tab_debug:
@@ -392,36 +461,35 @@ with tab_debug:
         
     with col_d2:
         if d_run:
-            if d_mode == "Depuración (Logs)":
+            if len(selected_features) < 2:
+                st.warning("Seleccione al menos 2 atributos en el sidebar para continuar.")
+            elif d_mode == "Depuración (Logs)":
                 st.markdown("#### Logs de Ejecución Paso a Paso")
                 log_capture = io.StringIO()
-                
+
                 with st.spinner("Ejecutando con logging activado..."):
                     with contextlib.redirect_stdout(log_capture):
                         model = builder_factory(d_impl)(d_k, int(d_seed), verbose=True)
                         if hasattr(model, 'n_init'):
                             model.n_init = 1
-                        
-                        model.fit(norm_bundle.X)
+
+                        model.fit(X_selected)
 
                 st.text_area("Traza del Algoritmo", log_capture.getvalue(), height=400)
-                
+
             else: # Stats/Profiling Mode
                 st.markdown("#### Perfilado de Clusters (Heatmap)")
                 with st.spinner("Generando mapa de calor..."):
                     model = builder_factory(d_impl)(d_k, int(d_seed), verbose=False)
-                    model.fit(norm_bundle.X)
-                    
-                    # Create Heatmap Data
+                    model.fit(X_selected)
+
+                    # Create Heatmap Data using selected features
                     centers = model.cluster_centers_
-                    feat_names = bundle.feature_names
-                    
-                    # Z-score centers are hard to interpret directly, but show relative differences
-                    # Let's visualize them directly as they represent z-scores (deviations from mean)
-                    
+                    feat_names = feature_names_selected
+
                     df_centers = pd.DataFrame(centers, columns=feat_names)
                     df_centers.index.name = "Cluster"
-                    
+
                     fig_heat = px.imshow(
                         df_centers,
                         labels=dict(x="Característica", y="Cluster", color="Z-Score"),
@@ -433,10 +501,26 @@ with tab_debug:
                     )
                     st.plotly_chart(fig_heat, use_container_width=True)
                     st.caption("Colores Rojos indican valores por encima del promedio. Azules indican por debajo.")
-                    
+
                 st.markdown("#### Visualización Espacial")
-                t_pca, t_radar = st.tabs(["PCA 2D", "Radar Chart"])
-                with t_pca:
-                    st.plotly_chart(plot_pca_2d(norm_bundle.X, model.labels_), use_container_width=True)
+                n_sel = len(feature_names_selected)
+                if n_sel == 2:
+                    tab_labels = ["Scatter 2D Directo", "Radar Chart"]
+                elif n_sel == 3:
+                    tab_labels = ["Scatter 3D Directo", "Radar Chart"]
+                else:
+                    tab_labels = ["PCA 2D", "Radar Chart"]
+
+                t_scatter, t_radar = st.tabs(tab_labels)
+                with t_scatter:
+                    if n_sel == 2:
+                        st.plotly_chart(plot_scatter_2d(X_selected, model.labels_, feature_names_selected), use_container_width=True)
+                        st.caption("Gráfico directo: los ejes representan los 2 atributos seleccionados (sin reducción de dimensionalidad).")
+                    elif n_sel == 3:
+                        st.plotly_chart(plot_scatter_3d(X_selected, model.labels_, feature_names_selected), use_container_width=True)
+                        st.caption("Gráfico directo 3D interactivo: los ejes representan los 3 atributos seleccionados.")
+                    else:
+                        st.plotly_chart(plot_pca_2d(X_selected, model.labels_), use_container_width=True)
+                        st.caption(f"Proyección PCA 2D aplicada sobre los {n_sel} atributos seleccionados.")
                 with t_radar:
-                    st.plotly_chart(plot_radar_centroids(model.cluster_centers_, bundle.feature_names), use_container_width=True)
+                    st.plotly_chart(plot_radar_centroids(model.cluster_centers_, feature_names_selected), use_container_width=True)

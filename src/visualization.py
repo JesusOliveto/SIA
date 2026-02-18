@@ -89,3 +89,64 @@ def plot_radar_centroids(centers: np.ndarray, feature_names: List[str]) -> go.Fi
         template="plotly_white"
     )
     return fig
+
+
+def plot_scatter_2d(X: np.ndarray, labels: np.ndarray, feature_names: List[str]) -> go.Figure:
+    """
+    Genera un scatter plot 2D directo cuando se seleccionan exactamente 2 features.
+
+    A diferencia de plot_pca_2d, este gráfico no aplica ninguna reducción de dimensionalidad,
+    por lo que los ejes representan directamente los atributos seleccionados por el usuario.
+
+    Args:
+        X: Datos de entrada (N, 2).
+        labels: Etiquetas de cluster para cada punto (N,).
+        feature_names: Lista con los 2 nombres de features.
+
+    Returns:
+        Objeto Figure de Plotly.
+    """
+    df = pd.DataFrame(X, columns=feature_names)
+    df["Cluster"] = labels.astype(str)
+
+    fig = px.scatter(
+        df,
+        x=feature_names[0],
+        y=feature_names[1],
+        color="Cluster",
+        title=f"Clusters 2D: {feature_names[0]} vs {feature_names[1]}",
+        template="plotly_white",
+        opacity=0.7,
+        labels={feature_names[0]: feature_names[0], feature_names[1]: feature_names[1]},
+    )
+    fig.update_layout(legend_title_text="Cluster")
+    return fig
+
+
+def plot_scatter_3d(X: np.ndarray, labels: np.ndarray, feature_names: List[str]) -> go.Figure:
+    """
+    Genera un scatter plot 3D interactivo directo cuando se seleccionan exactamente 3 features.
+
+    Args:
+        X: Datos de entrada (N, 3).
+        labels: Etiquetas de cluster para cada punto (N,).
+        feature_names: Lista con los 3 nombres de features.
+
+    Returns:
+        Objeto Figure de Plotly.
+    """
+    df = pd.DataFrame(X, columns=feature_names)
+    df["Cluster"] = labels.astype(str)
+
+    fig = px.scatter_3d(
+        df,
+        x=feature_names[0],
+        y=feature_names[1],
+        z=feature_names[2],
+        color="Cluster",
+        title=f"Clusters 3D: {feature_names[0]}, {feature_names[1]}, {feature_names[2]}",
+        template="plotly_white",
+        opacity=0.7,
+    )
+    fig.update_layout(legend_title_text="Cluster")
+    return fig

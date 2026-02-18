@@ -54,5 +54,13 @@ Este documento detalla secuencialmente las intervenciones realizadas en el proye
 
 
 
+
+## 11. Funcionalidades Adicionales
+- **Objetivo:** Implementar funcionalidades faltantes detectadas.
+- **Acción:**
+    - **Explorador de Datos:** Se agregó una nueva pestaña para inspeccionar datos crudos vs normalizados y ver estadísticas descriptivas por atributo.
+    - **Selección de Atributos:** Se implementó un multiselect en el sidebar que permite filtrar qué features utilizan los algoritmos.
+    - **Visualización Directa:** Se añadió lógica para graficar Scatter 2D y 3D directos (sin PCA) cuando se seleccionan 2 o 3 atributos respectivamente.
+
 ---
 **Estado Final:** El proyecto cumple con todos los requerimientos académicos y técnicos.
