@@ -34,21 +34,35 @@ st.set_page_config(
 # --- Header & Sidebar ---
 st.title("Sistema de Análisis de Calidad Vitivinícola")
 st.markdown("**Departamento de Inteligencia Artificial - Ultralistic**")
+st.markdown("Jesús Oliveto")
 st.markdown("---")
 
 st.sidebar.title("Configuración")
 st.sidebar.markdown("**Panel de Control**")
 
 @st.cache_data
-def load_data(filename: str = "whinequalityclean.arff") -> Tuple[DataBundle, DataBundle]:
+def load_data(filename: str = "winequalityclean.arff") -> Tuple[DataBundle, DataBundle]:
     """
-    Loads and normalizes the dataset.
+    Rutina de carga de datos con caché en memoria.
     
+    ¿Qué hace?:
+    Lee el archivo ARFF especificado, separa las características de los labels
+    y devuelve dos versiones del dataset: una cruda (original) y otra estandarizada (Z-Score).
+    
+    ¿Cómo lo hace?:
+    Aprovecha el decorador `@st.cache_data` de Streamlit para evitar recargar el archivo 
+    del disco duro en cada interacción (recálculo) de la interfaz gráfica. Llama internamente
+    a `load_winequality` y `normalize_bundle` del módulo `data.py`.
+    
+    Finalidad:
+    Minimizar la latencia I/O de la aplicación web y asegurar que todos los algoritmos 
+    puedan comparar la diferencia entre procesar datos crudos vs datos escalados estadísticamente.
+
     Args:
-        filename: Name of the ARFF file in datasets folder.
+        filename: Nombre del archivo ARFF en el directorio 'datasets'.
         
     Returns:
-        Tuple of (Raw Bundle, Normalized Bundle).
+        Tupla de (DataBundle Crudo, DataBundle Normalizado).
     """
     data_path = Path(__file__).resolve().parent / "datasets" / filename
     bundle = load_winequality(data_path)
@@ -59,7 +73,20 @@ def load_data(filename: str = "whinequalityclean.arff") -> Tuple[DataBundle, Dat
 
 
 def build_impls() -> Dict[str, str]:
-    """Returns the available K-Means implementations mapping."""
+    """
+    Provisión de las variantes del algoritmo.
+    
+    ¿Qué hace?: 
+    Devuelve un diccionario que asocia claves internas con etiquetas de interfaz de usuario.
+    
+    ¿Cómo lo hace?: 
+    Simplemente mapea strings ("loop", "numpy", "sklearn") a sus nombres legibles
+    para popular los selectores múltiples (multiselect) del sidebar.
+    
+    Finalidad:
+    Cargar de manera programática en la UI las diferencias que el proyecto 
+    pretende mostrar, permitiendo al usuario decidir qué motores correr.
+    """
     return {
         "loop": "K-Means (Python Loops)",
         "numpy": "K-Means (NumPy Vectorized)",
@@ -69,13 +96,27 @@ def build_impls() -> Dict[str, str]:
 
 def builder_factory(name: str):
     """
-    Factory to create KMeans instances.
+    Patrón de diseño Factory para el despacho de instanciación K-Means.
+    
+    ¿Qué hace?:
+    Retorna una función generadora (closure) que construye dinámicamente el modelo
+    apropiado basado en el nombre string solicitado por la UI.
+    
+    ¿Cómo lo hace?:
+    Usa estructuras `if/elif` para devolver una función lambda que, al momento de ser
+    invocada con `(k, seed)`, enlazará todos los parámetros (ej. `n_init`) correctos para 
+    esa implementación subyacente (`KMeansLoop`, `KMeansNumpy`, etc.).
+    
+    Finalidad:
+    Desacoplar la UI de la creación directa de objetos. Permite al motor de evaluación
+    instanciar algoritmos ciegamente usando una misma firma (interface polimórfica), 
+    facilitando el "benchmarking".
     
     Args:
-        name: Implementation key ('loop', 'numpy', 'sklearn').
+        name: Clave de la implementación ('loop', 'numpy', 'sklearn').
         
     Returns:
-        A callable that returns a fitted model.
+        Un callable que al ejecutarse devuelve el modelo listo para ser ajustado.
     """
     if name == "loop":
         return lambda k, seed, verbose=False: KMeansLoop(n_clusters=k, n_init=3, random_state=seed, verbose=verbose)
@@ -88,7 +129,22 @@ def builder_factory(name: str):
 
 def run_evaluation(norm_bundle: DataBundle, ks: List[int], impl_keys: List[str], n_runs: int, with_silhouette: bool) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Runs evaluating benchmarks across multiple K values and implementations.
+    Invocación masiva del núcleo evaluador.
+    
+    ¿Qué hace?:
+    Ejecuta el bloque de entrenamiento y métricas (`evaluate_models`) sobre todas 
+    las 'K' (clusters) y motores seleccionados, tabulando los resultados sin procesar
+    y promediándolos para la presentación.
+    
+    ¿Cómo lo hace?:
+    Adapta las funciones `factory` locales, lanza la validación cruzada y consolida 
+    los dataclasses generados (`RunResult`) en un DataFrame de Pandas para aplicar 
+    cálculos agregados (GroupBy `mean`) sobre el Tiempo, Inercia, ARI, etc.
+    
+    Finalidad:
+    Servir como puente de integración de Pandas a Streamlit. Prepara la "tabla gorda" de
+    todas las corridas de algoritmos en bruto (`df_runs`) y la "tabla limpia" 
+    estadísticamente promediada (`df_summary`) que consume la solapa Comparativa.
     """
     # Adapt factory to match evaluate_models signature (k, seed) -> model
     adapted_builders = {
@@ -139,10 +195,22 @@ def run_evaluation(norm_bundle: DataBundle, ks: List[int], impl_keys: List[str],
 
 def predict_single(impl: str, k: int, sample: np.ndarray, norm_bundle: DataBundle, random_state: int):
     """
-    Predicts the cluster for a single sample.
+    Inferencia end-to-end de una nueva muestra definida interactivamente en la interfaz.
     
-    IMPORTANT: This function retrains the model from scratch every time it is called,
-    as per requirements to demonstrate the algorithm's behavior without caching.
+    ¿Qué hace?:
+    Entrena por completo el modelo K-Means deseado sobre el dataset histórico base, 
+    evalúa la nueva muestra y calcula a qué distancia terminó clasificándose respecto 
+    de todos los centroides formados.
+    
+    ¿Cómo lo hace?:
+    Llama a la `builder_factory`, encadena un `fit()` completo de los datos, 
+    y luego invoca a `predict()`. Por último, usa el álgebra de norma Euclidiana de 
+    Numpy (`np.linalg.norm`) contra la memoria de los centroides de la clase resultante.
+    
+    Finalidad:
+    Demostrar visualmente y de forma aislada el comportamiento "en vivo" (en "producción")
+    del algoritmo, calculando distancias sin trampas de caché tal como indican 
+    los requerimientos explicativos de la simulación.
     """
     # 1. Instantiate and Train (Fresh)
     model = builder_factory(impl)(k, random_state, verbose=False)
@@ -158,7 +226,7 @@ def predict_single(impl: str, k: int, sample: np.ndarray, norm_bundle: DataBundl
 # --- Sidebar Inputs ---
 st.sidebar.subheader("Selección de Datos")
 dataset_map = {
-    "whinequalityclean.arff": "Dataset Limpio (Recomendado)",
+    "winequalityclean.arff": "Dataset Limpio (Recomendado)",
     "winequality.arff": "Dataset Original (Con Outliers)"
 }
 selected_filename = st.sidebar.selectbox(

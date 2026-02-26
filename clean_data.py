@@ -1,3 +1,12 @@
+"""
+Script de preprocesamiento y limpieza de datos (ETL: Extract, Transform, Load).
+
+Finalidad:
+Preparar un conjunto de datos robusto depurando valores atípicos (outliers) antes 
+del entrenamiento de K-Means. K-Means es extremadamente sensible a outliers
+porque minimiza distancias cuadráticas, lo que hace que un valor extremo arrastre 
+desproporcionadamente a los centroides y arruine los clústeres.
+"""
 import logging
 import sys
 from pathlib import Path
@@ -16,7 +25,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def load_arff(path: Path) -> pd.DataFrame:
-    """Loads an ARFF file into a pandas DataFrame."""
+    """
+    Carga de datos crudos.
+    
+    ¿Qué hace?: 
+    Lee un archivo con formato ARFF y lo convierte en una estructura tabular.
+    
+    ¿Cómo lo hace?: 
+    Utiliza el parser `arff.loadarff` de SciPy y envuelve el resultado en un 
+    DataFrame de Pandas. Además, decodifica cadenas binarias a UTF-8 si es necesario.
+    
+    Finalidad: 
+    Ingesta inicial de los datos de la base de datos estática al pipeline en memoria.
+    """
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
     
@@ -40,14 +61,28 @@ def load_arff(path: Path) -> pd.DataFrame:
 
 def clean_outliers(df: pd.DataFrame, factor: float = 1.5) -> pd.DataFrame:
     """
-    Removes outliers using the IQR method.
+    Detección y eliminación de valores atípicos (Outliers).
     
+    ¿Qué hace?:
+    Descarta muestras que presenten valores estadísticamente extremos en cualquiera 
+    de sus atributos numéricos.
+    
+    ¿Cómo lo hace?:
+    Aplica el método del Rango Intercuartílico (IQR). Calcula el cuartil 1 (Q1, 25%) y 
+    el cuartil 3 (Q3, 75%). Define los límites como `Q1 - factor * IQR` y 
+    `Q3 + factor * IQR`. Usa Pandas para filtrar y retener sólo las filas dentro de ese rango.
+    
+    Finalidad:
+    Como los centroides en K-Means son el promedio aritmético de sus puntos, suprimir 
+    estos "tirones" gravitacionales indeseados resulta en esferas de cluster más compactas 
+    y realistas, aumentando dramáticamente la silueta y significancia del agrupamiento.
+
     Args:
-        df: Input DataFrame.
-        factor: IQR multiplier (default 1.5).
+        df: DataFrame de entrada.
+        factor: Multiplicador del IQR (por defecto 1.5, estándar estadístico).
         
     Returns:
-        Cleaned DataFrame.
+        DataFrame limpio.
     """
     logger.info("Detecting outliers using IQR method...")
     
@@ -82,12 +117,24 @@ def clean_outliers(df: pd.DataFrame, factor: float = 1.5) -> pd.DataFrame:
 
 def save_arff(df: pd.DataFrame, input_path: Path, output_path: Path) -> None:
     """
-    Saves the DataFrame as an ARFF file, preserving the header from the input file.
+    Serialización de datos limpios.
     
+    ¿Qué hace?:
+    Vuelca el DataFrame procesado de nuevo al disco físico en el formato ARFF original.
+    
+    ¿Cómo lo hace?:
+    Es una escritura híbrida. Abre el archivo original (input_path) únicamente para "robar"
+    la cabecera (los tags @RELATION y @ATTRIBUTE). Luego itera sobre los registros limpios 
+    de Pandas y los añade al nuevo archivo como líneas de valores separados por comas.
+    
+    Finalidad:
+    Generar el artefacto final (`whinequalityclean.arff`) que la aplicación web consumirá 
+    durante el arranque, garantizando la persistencia de la limpieza.
+
     Args:
-        df: DataFrame to save.
-        input_path: Path to the original ARFF file (source of header).
-        output_path: Path to write the new ARFF file.
+        df: DataFrame a guardar.
+        input_path: Ruta del archivo ARFF original (para extraer Metadata).
+        output_path: Ruta de escritura del nuevo dataset limpio.
     """
     logger.info(f"Saving cleaned data to {output_path}...")
     
@@ -126,16 +173,16 @@ def save_arff(df: pd.DataFrame, input_path: Path, output_path: Path) -> None:
         raise
 
 def main():
+    """
+    Orquestador principal del proceso de limpieza.
+    
+    ¿Qué hace?:
+    Une secuencialmente la Ingesta -> Limpieza -> Guardado en disco.
+    Define las constantes de directorio y lanza el trabajo.
+    """
     base_dir = Path("datasets")
     input_file = base_dir / "winequality.arff"
-    output_file = base_dir / "whinequalityclean.arff" # Keeping typo 'whine' to maintain compatibility with app.py
-    
-    # Correcting typo for clarity if possible, but app.py expects 'whinequalityclean.arff'.
-    # I will stick to what app.py expects unless I change app.py too.
-    # Let's verify if app.py has the typo or if it was just in this script.
-    # app.py line 23: def load_data(filename: str = "whinequalityclean.arff")
-    # Yes, app.py has the typo. I will keep it for now to avoid breaking changes, 
-    # or I should fix it in both places. I'll check if I can fix it later.
+    output_file = base_dir / "winequalityclean.arff" 
     
     if not input_file.exists():
         logger.error(f"Input file not found: {input_file}")
