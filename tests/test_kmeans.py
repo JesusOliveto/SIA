@@ -13,9 +13,9 @@ def _toy_data():
 
 def test_loop_converges_two_clusters():
     X = _toy_data()
-    model = KMeansLoop(n_clusters=2, n_init=1, random_state=42, max_iter=50, tol=1e-4)
-    model.fit(X)
-    centers = np.sort(model.cluster_centers_, axis=0)
+    model = KMeansLoop(num_clusters=2, num_inicios=1, estado_aleatorio=42, max_iteraciones=50, tolerancia=1e-4)
+    model.ajustar(X)
+    centers = np.sort(model.centroides_, axis=0)
     assert centers.shape == (2, 2)
     assert np.allclose(centers[0], [0.33333333, 0.33333333], atol=1e-3)
     assert np.allclose(centers[1], [10.33333333, 10.33333333], atol=1e-3)
@@ -23,16 +23,16 @@ def test_loop_converges_two_clusters():
 
 def test_numpy_matches_loop_inertia():
     X = _toy_data()
-    loop = KMeansLoop(n_clusters=2, n_init=1, random_state=123)
-    np_model = KMeansNumpy(n_clusters=2, n_init=1, random_state=123)
-    loop.fit(X)
-    np_model.fit(X)
-    assert np.isclose(loop.inertia_, np_model.inertia_, rtol=1e-5)
+    loop = KMeansLoop(num_clusters=2, num_inicios=1, estado_aleatorio=123)
+    np_model = KMeansNumpy(num_clusters=2, num_inicios=1, estado_aleatorio=123)
+    loop.ajustar(X)
+    np_model.ajustar(X)
+    assert np.isclose(loop.inercia_, np_model.inercia_, rtol=1e-5)
 
 
 def test_empty_cluster_handled():
     X = np.array([[0.0, 0.0], [0.0, 0.0], [10.0, 10.0]], dtype=np.float64)
-    model = KMeansLoop(n_clusters=3, n_init=1, random_state=7, max_iter=20)
-    model.fit(X)
-    assert not np.isnan(model.cluster_centers_).any()
-    assert len(np.unique(model.labels_)) == 3
+    model = KMeansLoop(num_clusters=3, num_inicios=1, estado_aleatorio=7, max_iteraciones=20)
+    model.ajustar(X)
+    assert not np.isnan(model.centroides_).any()
+    assert len(np.unique(model.etiquetas_)) == 3

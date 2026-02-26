@@ -7,39 +7,39 @@ from typing import Callable, Dict, Iterable, List, Optional
 import numpy as np
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score, silhouette_score
 
-from .kmeans_base import KMeansLike
+from .kmeans_base import ModeloKMeans
 
 
 @dataclass
-class RunResult:
+class ResultadoEjecucion:
     """
     Estructura inmutable para registrar métricas de una sola iteracion (ejecución) de K-Means.
     
     ¿Qué hace?: 
     Contiene la metadata del modelo entrenado y los resultados multidimensionales,
-    separando variables de estado (como labels), rendimiento e índices analíticos.
+    separando variables de estado (como etiquetas), rendimiento e índices analíticos.
     """
-    impl: str
+    implementacion: str
     k: int
-    run: int
-    inertia: float
-    fit_time: float
-    n_iter: int
-    labels: np.ndarray
+    corrida: int
+    inercia: float
+    tiempo_entrenamiento: float
+    num_iteraciones: int
+    etiquetas: np.ndarray
     silhouette: Optional[float] = None
     ari: Optional[float] = None
     nmi: Optional[float] = None
 
 
-def evaluate_models(
-    X: np.ndarray,
-    ks: Iterable[int],
-    builders: Dict[str, Callable[[int, Optional[int]], KMeansLike]],
-    n_runs: int = 3,
-    random_state: Optional[int] = None,
-    compute_silhouette: bool = False,
-    y_true: Optional[np.ndarray] = None,
-) -> List[RunResult]:
+def evaluar_modelos(
+    datos: np.ndarray,
+    valores_k: Iterable[int],
+    constructores: Dict[str, Callable[[int, Optional[int]], ModeloKMeans]],
+    num_corridas: int = 3,
+    estado_aleatorio: Optional[int] = None,
+    calcular_silhouette: bool = False,
+    etiquetas_reales: Optional[np.ndarray] = None,
+) -> List[ResultadoEjecucion]:
     """
     Orquestador del pipeline de evaluación para el análisis comparativo (Benchmark).
 
@@ -49,54 +49,54 @@ def evaluate_models(
     ¿Cómo lo hace?:
     Itera exhaustivamente calculando en tiempo real:
     - Exactitud y penalización (Inercia).
-    - Eficiencia algorítmica (Tiempo de ajuste en segundos `fit_time`).
+    - Eficiencia algorítmica (Tiempo de ajuste en segundos `tiempo_entrenamiento`).
     - Validación Interna: Silhouette Score si solicitado (cohesión y separación).
-    - Validación Externa: (ARI y NMI) si se provee la clase real (y_true).
+    - Validación Externa: (ARI y NMI) si se provee la clase real (etiquetas_reales).
 
     Finalidad:
-    Generar un log consolidado y agnóstico a la implementación (`RunResult`)
+    Generar un log consolidado y agnóstico a la implementación (`ResultadoEjecucion`)
     que alimenta las visualizaciones académicas paramétricas de Streamlit.
     """
 
-    rng = np.random.default_rng(random_state)
-    results: List[RunResult] = []
-    for k in ks:
-        for run_idx in range(n_runs):
-            seed = int(rng.integers(0, 1_000_000_000))
-            for name, builder in builders.items():
-                model = builder(k, seed)
-                start = time.perf_counter()
-                model.fit(X)
-                elapsed = time.perf_counter() - start
+    generador = np.random.default_rng(estado_aleatorio)
+    resultados: List[ResultadoEjecucion] = []
+    for k in valores_k:
+        for idx_corrida in range(num_corridas):
+            semilla = int(generador.integers(0, 1_000_000_000))
+            for nombre, constructor in constructores.items():
+                modelo = constructor(k, semilla)
+                inicio = time.perf_counter()
+                modelo.ajustar(datos)
+                tiempo_transcurrido = time.perf_counter() - inicio
                 
-                sil_val = None
-                if compute_silhouette and k > 1:
+                valor_sil = None
+                if calcular_silhouette and k > 1:
                     try:
-                        if len(np.unique(model.labels_)) > 1:
-                            sil_val = float(silhouette_score(X, model.labels_))
+                        if len(np.unique(modelo.etiquetas_)) > 1:
+                            valor_sil = float(silhouette_score(datos, modelo.etiquetas_))
                         else:
-                            sil_val = -1.0
+                            valor_sil = -1.0
                     except Exception:
-                        sil_val = None
+                        valor_sil = None
                 
-                ari_val = None
-                nmi_val = None
-                if y_true is not None:
-                    ari_val = float(adjusted_rand_score(y_true, model.labels_))
-                    nmi_val = float(normalized_mutual_info_score(y_true, model.labels_))
+                valor_ari = None
+                valor_nmi = None
+                if etiquetas_reales is not None:
+                    valor_ari = float(adjusted_rand_score(etiquetas_reales, modelo.etiquetas_))
+                    valor_nmi = float(normalized_mutual_info_score(etiquetas_reales, modelo.etiquetas_))
 
-                results.append(
-                    RunResult(
-                        impl=name,
+                resultados.append(
+                    ResultadoEjecucion(
+                        implementacion=nombre,
                         k=k,
-                        run=run_idx,
-                        inertia=model.inertia_,
-                        fit_time=elapsed,
-                        n_iter=model.n_iter_,
-                        labels=model.labels_,
-                        silhouette=sil_val,
-                        ari=ari_val,
-                        nmi=nmi_val,
+                        corrida=idx_corrida,
+                        inercia=modelo.inercia_,
+                        tiempo_entrenamiento=tiempo_transcurrido,
+                        num_iteraciones=modelo.num_iteraciones_,
+                        etiquetas=modelo.etiquetas_,
+                        silhouette=valor_sil,
+                        ari=valor_ari,
+                        nmi=valor_nmi,
                     )
                 )
-    return results
+    return resultados

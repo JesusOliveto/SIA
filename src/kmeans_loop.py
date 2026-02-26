@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from .kmeans_base import compute_inertia
-from .utils import ensure_rng
+from .kmeans_base import calcular_inercia
+from .utils import asegurar_generador
 
 
 class KMeansLoop:
@@ -11,7 +11,7 @@ class KMeansLoop:
     Implementación de K-Means utilizando bucles explícitos de Python (sin vectorizar).
 
     ¿Qué hace?:
-    Agrupa un conjunto de datos en 'n_clusters' particiones distintas basándose en la
+    Agrupa un conjunto de datos en 'num_clusters' particiones distintas basándose en la
     similitud (distancia Euclidiana) entre las muestras.
 
     ¿Cómo lo hace?:
@@ -24,50 +24,50 @@ class KMeansLoop:
     nivel de abstracción que introduce la vectorización matricial de NumPy.
     """
 
-    def __init__(self, n_clusters: int, max_iter: int = 300, tol: float = 1e-4, n_init: int = 1, random_state: int | None = None, verbose: bool = False) -> None:
-        if n_clusters <= 0:
-            raise ValueError("n_clusters must be positive.")
-        self.n_clusters = n_clusters
-        self.max_iter = max_iter
-        self.tol = tol
-        self.n_init = n_init
-        self.random_state = random_state
-        self.verbose = verbose
+    def __init__(self, num_clusters: int, max_iteraciones: int = 300, tolerancia: float = 1e-4, num_inicios: int = 1, estado_aleatorio: int | None = None, detallado: bool = False) -> None:
+        if num_clusters <= 0:
+            raise ValueError("num_clusters debe ser positivo.")
+        self.num_clusters = num_clusters
+        self.max_iteraciones = max_iteraciones
+        self.tolerancia = tolerancia
+        self.num_inicios = num_inicios
+        self.estado_aleatorio = estado_aleatorio
+        self.detallado = detallado
 
-        self.cluster_centers_: np.ndarray | None = None
-        self.labels_: np.ndarray | None = None
-        self.inertia_: float | None = None
-        self.n_iter_: int | None = None
+        self.centroides_: np.ndarray | None = None
+        self.etiquetas_: np.ndarray | None = None
+        self.inercia_: float | None = None
+        self.num_iteraciones_: int | None = None
 
     @property
-    def cluster_centers(self) -> np.ndarray:
+    def centroides(self) -> np.ndarray:
         """
         Devuelve las coordenadas de los centros de los clusters.
         
         Finalidad: Proveer acceso seguro de solo lectura a los centroides 
         una vez que el algoritmo ha finalizado su entrenamiento.
         """
-        if self.cluster_centers_ is None:
+        if self.centroides_ is None:
             raise RuntimeError("El modelo no ha sido ajustado (fitted).")
-        return self.cluster_centers_
+        return self.centroides_
 
     @property
-    def labels(self) -> np.ndarray:
+    def etiquetas(self) -> np.ndarray:
         """Devuelve las etiquetas de cada punto."""
-        if self.labels_ is None:
+        if self.etiquetas_ is None:
             raise RuntimeError("El modelo no ha sido ajustado (fitted).")
-        return self.labels_
+        return self.etiquetas_
 
-    def fit(self, X: np.ndarray) -> "KMeansLoop":
+    def ajustar(self, datos: np.ndarray) -> "KMeansLoop":
         """
         Calcula el clustering K-means utilizando bucles explícitos.
 
         ¿Qué hace?:
         Ejecuta el ciclo de entrenamiento completo. Puede ejecutar el algoritmo múltiples 
-        veces (n_init) con diferentes semillas iniciales.
+        veces (num_inicios) con diferentes semillas iniciales.
 
         ¿Cómo lo hace?:
-        Itera 'n_init' veces llamando a '_run_single'. Al final, retiene el modelo
+        Itera 'num_inicios' veces llamando a '_ejecutar_corrida'. Al final, retiene el modelo
         con la menor inercia encontrada de entre todas las ejecuciones para evitar mínimos locales.
 
         Finalidad:
@@ -75,34 +75,34 @@ class KMeansLoop:
         las etiquetas óptimas a cada muestra, preparándolo para inferencias.
 
         Args:
-            X: Datos estructurados de forma (n_samples, n_features).
+            datos: Datos estructurados de forma (num_muestras, num_caracteristicas).
 
         Returns:
             self: El estimador ajustado.
         """
-        X = np.asarray(X, dtype=np.float64)
-        best_inertia = np.inf
-        best_centers = None
-        best_labels = None
-        best_n_iter = 0
+        datos_np = np.asarray(datos, dtype=np.float64)
+        mejor_inercia = np.inf
+        mejores_centroides = None
+        mejores_etiquetas = None
+        mejor_num_iter = 0
 
-        base_rng = ensure_rng(self.random_state)
-        for _ in range(self.n_init):
-            seed = int(base_rng.integers(0, 1_000_000_000))
-            centers, labels, inertia, n_iter = self._run_single(X, seed)
-            if inertia < best_inertia:
-                best_inertia = inertia
-                best_centers = centers
-                best_labels = labels
-                best_n_iter = n_iter
+        generador_base = asegurar_generador(self.estado_aleatorio)
+        for _ in range(self.num_inicios):
+            semilla = int(generador_base.integers(0, 1_000_000_000))
+            centroides, etiquetas, inercia, num_iter = self._ejecutar_corrida(datos_np, semilla)
+            if inercia < mejor_inercia:
+                mejor_inercia = inercia
+                mejores_centroides = centroides
+                mejores_etiquetas = etiquetas
+                mejor_num_iter = num_iter
 
-        self.cluster_centers_ = np.asarray(best_centers, dtype=np.float64)
-        self.labels_ = np.asarray(best_labels, dtype=np.int32)
-        self.inertia_ = float(best_inertia)
-        self.n_iter_ = int(best_n_iter)
+        self.centroides_ = np.asarray(mejores_centroides, dtype=np.float64)
+        self.etiquetas_ = np.asarray(mejores_etiquetas, dtype=np.int32)
+        self.inercia_ = float(mejor_inercia)
+        self.num_iteraciones_ = int(mejor_num_iter)
         return self
 
-    def _run_single(self, X: np.ndarray, seed: int):
+    def _ejecutar_corrida(self, datos: np.ndarray, semilla: int):
         """
         Ejecuta una única iteración (corrida independiente) del algoritmo K-Means.
         
@@ -112,76 +112,75 @@ class KMeansLoop:
         1) Asignar muestras, 2) Recalcular centroides.
         
         ¿Cómo lo hace?:
-        Repite el ciclo hasta que el desplazamiento ('shift') de los centroides 
-        en una iteración sea menor que una tolerancia 'tol', o se alcance 'max_iter'. 
-        Al usar bucles 'for', permite inyectar fácilmente código de logging (verbose).
+        Repite el ciclo hasta que el desplazamiento ('desplazamiento') de los centroides 
+        en una iteración sea menor que una tolerancia 'tolerancia', o se alcance 'max_iteraciones'. 
+        Al usar bucles 'for', permite inyectar fácilmente código de logging (detallado).
         
         Finalidad:
         Llevar a cabo la lógica algorítmica iterativa fundamental para llegar
-        a una convergencia desde un punto de partida (seed) específico.
+        a una convergencia desde un punto de partida (semilla) específico.
         
         Args:
-            X: Datos de entrada.
-            seed: Semilla aleatoria para reproducibilidad en esta ejecución.
+            datos: Datos de entrada.
+            semilla: Semilla aleatoria para reproducibilidad en esta ejecución.
             
         Returns:
-            Tupla de (centros, etiquetas, inercia, n_iter).
+            Tupla de (centroides, etiquetas, inercia, num_iter).
         """
-        rng = ensure_rng(seed)
-        n_samples = X.shape[0]
-        indices = rng.choice(n_samples, size=self.n_clusters, replace=False)
-        centers = X[indices].copy()
+        generador = asegurar_generador(semilla)
+        num_muestras = datos.shape[0]
+        indices = generador.choice(num_muestras, size=self.num_clusters, replace=False)
+        centroides = datos[indices].copy()
 
-        labels = np.zeros(n_samples, dtype=np.int32)
-        for iteration in range(self.max_iter):
-            labels = self._assign_labels(X, centers)
-            new_centers, empty = self._recompute_centers(X, labels)
-            if empty:
-                self._fix_empty_clusters(X, new_centers, labels, rng)
+        etiquetas = np.zeros(num_muestras, dtype=np.int32)
+        for iteracion in range(self.max_iteraciones):
+            etiquetas = self._asignar_etiquetas(datos, centroides)
+            nuevos_centroides, vacios = self._recalcular_centroides(datos, etiquetas)
+            if vacios:
+                self._arreglar_clusters_vacios(datos, nuevos_centroides, etiquetas, generador)
 
-            shift = float(np.max(np.linalg.norm(new_centers - centers, axis=1)))
+            desplazamiento = float(np.max(np.linalg.norm(nuevos_centroides - centroides, axis=1)))
             
-            if self.verbose:
-                # Calculate inertia for logging (expensive but useful for debug)
-                current_inertia = compute_inertia(X, new_centers, labels)
-                print(f"[Loop] Iter {iteration+1}: desplazamiento={shift:.6f}, inercia={current_inertia:.4f}")
+            if self.detallado:
+                inercia_actual = calcular_inercia(datos, nuevos_centroides, etiquetas)
+                print(f"[Loop] Iter {iteracion+1}: desplazamiento={desplazamiento:.6f}, inercia={inercia_actual:.4f}")
 
-            centers = new_centers
-            if shift <= self.tol:
-                if self.verbose:
-                    print(f"[Loop] Convergencia en iter {iteration+1}")
+            centroides = nuevos_centroides
+            if desplazamiento <= self.tolerancia:
+                if self.detallado:
+                    print(f"[Loop] Convergencia en iter {iteracion+1}")
                 break
 
-        inertia = compute_inertia(X, centers, labels)
-        return centers, labels, inertia, iteration + 1
+        inercia = calcular_inercia(datos, centroides, etiquetas)
+        return centroides, etiquetas, inercia, iteracion + 1
 
-    def _assign_labels(self, X: np.ndarray, centers: np.ndarray) -> np.ndarray:
+    def _asignar_etiquetas(self, datos: np.ndarray, centroides: np.ndarray) -> np.ndarray:
         """
         Paso 1 del algoritmo de Lloyd: Asignación.
         Asigna cada muestra al centroide más cercano utilizando bucles explícitos.
         
         ¿Cómo lo hace?:
-        Itera sobre todas las muestras de 'X', y para cada muestra evalúa la distancia
+        Itera sobre todas las muestras de 'datos', y para cada muestra evalúa la distancia
         cuadrada frente a cada centroide para determinar y retornar el índice más próximo.
         
         Finalidad:
         Mostrar de la forma más rudimentaria, pero clara para la enseñanza de Python, 
         cómo se deciden los clústeres iterando elemento a elemento (O(N*K*D)).
         """
-        n_samples = X.shape[0]
-        labels = np.zeros(n_samples, dtype=np.int32)
-        for i in range(n_samples):
-            best_label = 0
-            best_dist = np.inf
-            for c_idx in range(self.n_clusters):
-                dist = float(np.sum((X[i] - centers[c_idx]) ** 2))
-                if dist < best_dist:
-                    best_dist = dist
-                    best_label = c_idx
-            labels[i] = best_label
-        return labels
+        num_muestras = datos.shape[0]
+        etiquetas = np.zeros(num_muestras, dtype=np.int32)
+        for i in range(num_muestras):
+            mejor_etiqueta = 0
+            mejor_distancia = np.inf
+            for idx_c in range(self.num_clusters):
+                distancia = float(np.sum((datos[i] - centroides[idx_c]) ** 2))
+                if distancia < mejor_distancia:
+                    mejor_distancia = distancia
+                    mejor_etiqueta = idx_c
+            etiquetas[i] = mejor_etiqueta
+        return etiquetas
 
-    def _recompute_centers(self, X: np.ndarray, labels: np.ndarray):
+    def _recalcular_centroides(self, datos: np.ndarray, etiquetas: np.ndarray):
         """
         Paso 2 del algoritmo de Lloyd: Actualización.
         Recalcula los centroides como el promedio ponderado de los puntos asignados.
@@ -193,43 +192,43 @@ class KMeansLoop:
         su partición respectiva para minimizar iterativamente la inercia del sistema.
         Devuelve información sobre clústeres no asignados (vacíos) para corregirlos.
         """
-        centers = np.zeros((self.n_clusters, X.shape[1]), dtype=np.float64)
-        counts = np.zeros(self.n_clusters, dtype=np.int32)
-        for idx, label in enumerate(labels):
-            centers[label] += X[idx]
-            counts[label] += 1
+        centroides = np.zeros((self.num_clusters, datos.shape[1]), dtype=np.float64)
+        conteos = np.zeros(self.num_clusters, dtype=np.int32)
+        for idx, etiqueta in enumerate(etiquetas):
+            centroides[etiqueta] += datos[idx]
+            conteos[etiqueta] += 1
 
-        empty_clusters = []
-        for c_idx in range(self.n_clusters):
-            if counts[c_idx] == 0:
-                empty_clusters.append(c_idx)
+        clusters_vacios = []
+        for idx_c in range(self.num_clusters):
+            if conteos[idx_c] == 0:
+                clusters_vacios.append(idx_c)
             else:
-                centers[c_idx] /= counts[c_idx]
-        return centers, empty_clusters
+                centroides[idx_c] /= conteos[idx_c]
+        return centroides, clusters_vacios
 
-    def _fix_empty_clusters(self, X: np.ndarray, centers: np.ndarray, labels: np.ndarray, rng: np.random.Generator) -> None:
+    def _arreglar_clusters_vacios(self, datos: np.ndarray, centroides: np.ndarray, etiquetas: np.ndarray, generador: np.random.Generator) -> None:
         """
         Maneja la anomalía matemática de clusters vacíos (sin muestras asignadas).
 
         ¿Cómo lo hace?:
-        Encuentra el punto 'X' que tiene la mayor distancia global con respecto a 
+        Encuentra el punto 'datos' que tiene la mayor distancia global con respecto a 
         su centroide actual, y reubica allí el centroide huérfano (vacío).
         
         Finalidad:
         Asegurar robustez empírica del algoritmo. Sin esta gestión la varianza inter-cluster
         caería sin justificación y un centroide dejaría de impactar la partición del espacio.
         """
-        distances = np.zeros(X.shape[0], dtype=np.float64)
-        for i in range(X.shape[0]):
-            c_idx = labels[i]
-            distances[i] = float(np.sum((X[i] - centers[c_idx]) ** 2))
-        farthest_idx = int(np.argmax(distances))
-        empty = np.setdiff1d(np.arange(self.n_clusters), np.unique(labels))
-        for c_idx in empty:
-            centers[c_idx] = X[farthest_idx]
-            labels[farthest_idx] = c_idx
+        distancias = np.zeros(datos.shape[0], dtype=np.float64)
+        for i in range(datos.shape[0]):
+            idx_c = etiquetas[i]
+            distancias[i] = float(np.sum((datos[i] - centroides[idx_c]) ** 2))
+        indice_mas_lejano = int(np.argmax(distancias))
+        vacios = np.setdiff1d(np.arange(self.num_clusters), np.unique(etiquetas))
+        for idx_c in vacios:
+            centroides[idx_c] = datos[indice_mas_lejano]
+            etiquetas[indice_mas_lejano] = idx_c
 
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predecir(self, datos: np.ndarray) -> np.ndarray:
         """
         Inferencia de cluster. Predice a qué partición pertenece cada nueva muestra.
 
@@ -242,16 +241,17 @@ class KMeansLoop:
         datos venideros tras haber validado el modelo K-Means actual.
 
         Args:
-            X: Nuevos datos a predecir.
+            datos: Nuevos datos a predecir.
 
         Returns:
             Etiquetas de cluster.
         """
-        if self.cluster_centers_ is None:
+        if self.centroides_ is None:
             raise RuntimeError("El modelo no ha sido ajustado (fitted).")
-        X = np.asarray(X, dtype=np.float64)
-        return self._assign_labels(X, self.cluster_centers_)
+        datos_np = np.asarray(datos, dtype=np.float64)
+        return self._asignar_etiquetas(datos_np, self.centroides_)
 
-    def fit_predict(self, X: np.ndarray) -> np.ndarray:
+    def ajustar_predecir(self, datos: np.ndarray) -> np.ndarray:
         """Calcula los centros de los clusters y predice el índice del cluster para cada muestra."""
-        return self.fit(X).labels_
+        return self.ajustar(datos).etiquetas_
+

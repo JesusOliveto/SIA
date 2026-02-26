@@ -10,24 +10,24 @@ from scipy.io import arff
 
 
 @dataclass
-class DataBundle:
+class PaqueteDatos:
     """
     Estructura de datos centralizada (Data Transfer Object) para el proyecto.
     
     ¿Qué hace?:
-    Encapsula la matriz de características (X), las etiquetas verdaderas opcionales (y),
-    y los nombres legibles de cada columna (feature_names).
+    Encapsula la matriz de características (datos), las etiquetas verdaderas opcionales (etiquetas_reales),
+    y los nombres legibles de cada columna (nombres_caracteristicas).
     
     Finalidad:
     Simplificar y estandarizar el paso de datos a través de las diferentes etapas 
     del pipeline interactivo (Carga -> Normalización -> Entrenamiento -> Evaluación -> Interfaz).
     """
-    X: np.ndarray
-    y: Optional[np.ndarray]
-    feature_names: List[str]
+    datos: np.ndarray
+    etiquetas_reales: Optional[np.ndarray]
+    nombres_caracteristicas: List[str]
 
 
-class ZScoreScaler:
+class EscaladorZScore:
     """
     Normalizador estadístico Z-Score (Estandarización) minimalista.
     
@@ -38,31 +38,31 @@ class ZScoreScaler:
     ¿Por qué usarlo en lugar de nada?:
     K-Means es un algoritmo basado estrictamente en distancias. Si las características
     están en escalas muy diferentes (ej: Alcohol en % vs Dióxido de Azufre en mg/L),
-    las variables con de valores numéricamente mayores dominarán la distancia asignando
+    las variables con valores numéricamente mayores dominarán la distancia asignando
     pesos artificiales que corrompen la topología geométrica real de los datos.
     """
 
-    def __init__(self, eps: float = 1e-12) -> None:
-        self.eps = eps
-        self.mean_: Optional[np.ndarray] = None
-        self.scale_: Optional[np.ndarray] = None
+    def __init__(self, epsilon: float = 1e-12) -> None:
+        self.epsilon = epsilon
+        self.media_: Optional[np.ndarray] = None
+        self.escala_: Optional[np.ndarray] = None
 
-    def fit(self, X: np.ndarray) -> "ZScoreScaler":
-        self.mean_ = np.asarray(X, dtype=np.float64).mean(axis=0)
-        self.scale_ = np.asarray(X, dtype=np.float64).std(axis=0)
-        self.scale_ = np.where(self.scale_ < self.eps, 1.0, self.scale_)
+    def ajustar(self, datos: np.ndarray) -> "EscaladorZScore":
+        self.media_ = np.asarray(datos, dtype=np.float64).mean(axis=0)
+        self.escala_ = np.asarray(datos, dtype=np.float64).std(axis=0)
+        self.escala_ = np.where(self.escala_ < self.epsilon, 1.0, self.escala_)
         return self
 
-    def transform(self, X: np.ndarray) -> np.ndarray:
-        if self.mean_ is None or self.scale_ is None:
-            raise RuntimeError("Scaler not fitted.")
-        return (np.asarray(X, dtype=np.float64) - self.mean_) / self.scale_
+    def transformar(self, datos: np.ndarray) -> np.ndarray:
+        if self.media_ is None or self.escala_ is None:
+            raise RuntimeError("Escalador no ajustado.")
+        return (np.asarray(datos, dtype=np.float64) - self.media_) / self.escala_
 
-    def fit_transform(self, X: np.ndarray) -> np.ndarray:
-        return self.fit(X).transform(X)
+    def ajustar_transformar(self, datos: np.ndarray) -> np.ndarray:
+        return self.ajustar(datos).transformar(datos)
 
 
-def load_winequality(path: str | Path) -> DataBundle:
+def cargar_calidad_vino(ruta: str | Path) -> PaqueteDatos:
     """
     Función de extracción y transformación inicial de datos (Extract & Load).
     
@@ -74,30 +74,30 @@ def load_winequality(path: str | Path) -> DataBundle:
     Convertir datos estáticos serializados en disco en un formato consumible en memoria
     (matrices contiguas de NumPy) listo para cálculos matriciales C++.
     """
-    path = Path(path)
-    raw, _ = arff.loadarff(path)
-    df = pd.DataFrame(raw)
+    ruta = Path(ruta)
+    crudo, _ = arff.loadarff(ruta)
+    df = pd.DataFrame(crudo)
 
-    feature_names = [c for c in df.columns if c.lower() != "class"]
-    X = df[feature_names].to_numpy(dtype=np.float32)
+    nombres_caracteristicas = [c for c in df.columns if c.lower() != "class"]
+    datos_x = df[nombres_caracteristicas].to_numpy(dtype=np.float32)
 
-    y: Optional[np.ndarray] = None
+    etiquetas_y: Optional[np.ndarray] = None
     if "class" in df.columns:
-        y_raw = df["class"]
-        if y_raw.dtype.kind in {"S", "U", "O"}:
-            y = y_raw.astype(str).to_numpy()
+        y_crudo = df["class"]
+        if y_crudo.dtype.kind in {"S", "U", "O"}:
+            etiquetas_y = y_crudo.astype(str).to_numpy()
         else:
-            y = y_raw.to_numpy()
-        y = y.astype(np.int32, copy=False)
+            etiquetas_y = y_crudo.to_numpy()
+        etiquetas_y = etiquetas_y.astype(np.int32, copy=False)
 
-    return DataBundle(X=X, y=y, feature_names=feature_names)
+    return PaqueteDatos(datos=datos_x, etiquetas_reales=etiquetas_y, nombres_caracteristicas=nombres_caracteristicas)
 
 
-def normalize_bundle(bundle: DataBundle, scaler: Optional[ZScoreScaler] = None) -> Tuple[DataBundle, ZScoreScaler]:
+def normalizar_paquete(paquete: PaqueteDatos, escalador: Optional[EscaladorZScore] = None) -> Tuple[PaqueteDatos, EscaladorZScore]:
     """
-    Aplica transformación a un DataBundle existente. Devuelve un Bundle nuevo inmutable.
+    Aplica transformación a un PaqueteDatos existente. Devuelve un Paquete nuevo inmutable.
     Útil en Streamlit para no alterar el caché del dataset original.
     """
-    sc = scaler or ZScoreScaler()
-    X_norm = sc.fit_transform(bundle.X) if scaler is None else sc.transform(bundle.X)
-    return DataBundle(X=X_norm.astype(np.float32), y=bundle.y, feature_names=bundle.feature_names), sc
+    esc = escalador or EscaladorZScore()
+    datos_norm = esc.ajustar_transformar(paquete.datos) if escalador is None else esc.transformar(paquete.datos)
+    return PaqueteDatos(datos=datos_norm.astype(np.float32), etiquetas_reales=paquete.etiquetas_reales, nombres_caracteristicas=paquete.nombres_caracteristicas), esc

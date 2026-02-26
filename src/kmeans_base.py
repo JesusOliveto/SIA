@@ -5,7 +5,7 @@ from typing import Protocol
 import numpy as np
 
 
-class KMeansLike(Protocol):
+class ModeloKMeans(Protocol):
     """
     Protocolo o interfaz base que define los métodos y atributos requeridos
     para cualquier implementación del algoritmo K-Means en este proyecto.
@@ -15,38 +15,38 @@ class KMeansLike(Protocol):
     sean intercambiables y respeten la misma API pública, facilitando su uso
     polimórfico en el sistema de evaluación y visualización.
     """
-    n_clusters: int
-    cluster_centers_: np.ndarray
-    labels_: np.ndarray
-    inertia_: float
-    n_iter_: int
+    num_clusters: int
+    centroides_: np.ndarray
+    etiquetas_: np.ndarray
+    inercia_: float
+    num_iteraciones_: int
 
-    def fit(self, X: np.ndarray) -> "KMeansLike":
+    def ajustar(self, datos: np.ndarray) -> "ModeloKMeans":
         ...
 
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predecir(self, datos: np.ndarray) -> np.ndarray:
         ...
 
-    def fit_predict(self, X: np.ndarray) -> np.ndarray:
+    def ajustar_predecir(self, datos: np.ndarray) -> np.ndarray:
         ...
 
 
-def compute_inertia(X: np.ndarray, centers: np.ndarray, labels: np.ndarray) -> float:
+def calcular_inercia(datos: np.ndarray, centroides: np.ndarray, etiquetas: np.ndarray) -> float:
     """
     Calcula la inercia (Suma de los Cuadrados dentro del Cluster, WCSS).
 
     ¿Qué hace?:
-    Mide cuán internamente compactos son los clusters. Calcula la suma de la las
+    Mide cuán internamente compactos son los clusters. Calcula la suma de las
     distancias al cuadrado de cada muestra a su centroide asignado.
 
     ¿Cómo lo hace?:
-    Resta a cada punto de datos 'X' las coordenadas de su centroide
-    correspondiente (centers[labels]) y realiza la suma global de sus cuadrados.
+    Resta a cada punto de datos 'datos' las coordenadas de su centroide
+    correspondiente (centroides[etiquetas]) y realiza la suma global de sus cuadrados.
 
     Finalidad:
     La inercia es la métrica intrínseca principal que el algoritmo K-Means minimiza.
     Se utiliza para evaluar la calidad del clustering (útil para el método del codo)
-    y para seleccionar la mejor ejecución entre múltiples intentos (n_init).
+    y para seleccionar la mejor ejecución entre múltiples intentos (num_inicios).
     """
-    diffs = X - centers[labels]
-    return float(np.sum(diffs * diffs))
+    diferencias = datos - centroides[etiquetas]
+    return float(np.sum(diferencias * diferencias))

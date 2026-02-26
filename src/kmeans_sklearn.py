@@ -10,10 +10,10 @@ class KMeansSklearn:
     
     ¿Qué hace?:
     Instancia y ejecuta el algoritmo K-Means provisto por la librería externa Scikit-Learn,
-    adaptándolo a la interfaz `KMeansLike` del proyecto.
+    adaptándolo a la interfaz `ModeloKMeans` del proyecto.
     
     ¿Cómo lo hace?:
-    Delega internamente las llamadas `fit`, `predict`, etc., a una instancia 
+    Delega internamente las llamadas `ajustar`, `predecir`, etc., a una instancia 
     del objeto `sklearn.cluster.KMeans` configurado con los parámetros provistos.
     
     Finalidad:
@@ -22,32 +22,32 @@ class KMeansSklearn:
     comercial altamente optimizado escrito en C/Cython.
     """
 
-    def __init__(self, n_clusters: int, max_iter: int = 300, tol: float = 1e-4, n_init: int = 10, random_state: int | None = None) -> None:
-        self.model = KMeans(
-            n_clusters=n_clusters,
-            max_iter=max_iter,
-            tol=tol,
-            n_init=n_init,
-            random_state=random_state,
+    def __init__(self, num_clusters: int, max_iteraciones: int = 300, tolerancia: float = 1e-4, num_inicios: int = 10, estado_aleatorio: int | None = None) -> None:
+        self.modelo = KMeans(
+            n_clusters=num_clusters,
+            max_iter=max_iteraciones,
+            tol=tolerancia,
+            n_init=num_inicios,
+            random_state=estado_aleatorio,
             init="k-means++",
         )
 
-    def fit(self, X: np.ndarray) -> "KMeansSklearn":
+    def ajustar(self, datos: np.ndarray) -> "KMeansSklearn":
         """
         Ajusta el modelo K-Means utilizando scikit-learn.
         
         Finalidad: Ejecuta la lógica optimizada de ajuste para el dataset y
         extrae los atributos resultantes al mismo formato del proyecto.
         """
-        self.model.fit(X)
-        self.cluster_centers_ = self.model.cluster_centers_
-        self.labels_ = self.model.labels_
-        self.inertia_ = float(self.model.inertia_)
-        self.n_iter_ = int(self.model.n_iter_)
+        self.modelo.fit(datos)
+        self.centroides_ = self.modelo.cluster_centers_
+        self.etiquetas_ = self.modelo.labels_
+        self.inercia_ = float(self.modelo.inertia_)
+        self.num_iteraciones_ = int(self.modelo.n_iter_)
         return self
 
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        return self.model.predict(X)
+    def predecir(self, datos: np.ndarray) -> np.ndarray:
+        return self.modelo.predict(datos)
 
-    def fit_predict(self, X: np.ndarray) -> np.ndarray:
-        return self.model.fit_predict(X)
+    def ajustar_predecir(self, datos: np.ndarray) -> np.ndarray:
+        return self.modelo.fit_predict(datos)

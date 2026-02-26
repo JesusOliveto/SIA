@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 
 
-def plot_pca_2d(X: np.ndarray, labels: np.ndarray) -> go.Figure:
+def graficar_pca_2d(datos: np.ndarray, etiquetas: np.ndarray) -> go.Figure:
     """
     Proyecta los datos de alta dimensionalidad a 2D utilizando PCA.
     
@@ -28,17 +28,17 @@ def plot_pca_2d(X: np.ndarray, labels: np.ndarray) -> go.Figure:
     veremos manchas de color bien separadas en el plano de Componentes Principales.
 
     Args:
-        X: Datos de entrada escalar (N, D).
-        labels: Etiquetas de cluster para cada punto (N,).
+        datos: Datos de entrada escalar (N, D).
+        etiquetas: Etiquetas de cluster para cada punto (N,).
 
     Returns:
         Objeto Figure de Plotly.
     """
     pca = PCA(n_components=2)
-    X_pca = pca.fit_transform(X)
+    datos_pca = pca.fit_transform(datos)
     
-    df = pd.DataFrame(X_pca, columns=["PC1", "PC2"])
-    df["Cluster"] = labels.astype(str)
+    df = pd.DataFrame(datos_pca, columns=["PC1", "PC2"])
+    df["Cluster"] = etiquetas.astype(str)
     
     fig = px.scatter(
         df, 
@@ -53,7 +53,7 @@ def plot_pca_2d(X: np.ndarray, labels: np.ndarray) -> go.Figure:
     return fig
 
 
-def plot_radar_centroids(centers: np.ndarray, feature_names: List[str]) -> go.Figure:
+def graficar_radar_centroides(centroides: np.ndarray, nombres_caracteristicas: List[str]) -> go.Figure:
     """
     Genera un gráfico de radar (araña) multivariable comparando perfiles de centroides.
     
@@ -73,8 +73,8 @@ def plot_radar_centroids(centers: np.ndarray, feature_names: List[str]) -> go.Fi
     a cada clúster (ej. "Vino Rico en Azúcar y Bajo en Alcohol").
 
     Args:
-        centers: Centros de cluster (K, D).
-        feature_names: Nombres de características de longitud D.
+        centroides: Centros de cluster (K, D).
+        nombres_caracteristicas: Nombres de características de longitud D.
 
     Returns:
         Objeto Figure de Plotly.
@@ -82,15 +82,15 @@ def plot_radar_centroids(centers: np.ndarray, feature_names: List[str]) -> go.Fi
     fig = go.Figure()
     
     # Close the loop for radar chart
-    categories = feature_names + [feature_names[0]]
+    categorias = nombres_caracteristicas + [nombres_caracteristicas[0]]
     
-    for i, center in enumerate(centers):
-        values = list(center)
-        values += [values[0]]
+    for i, centroide in enumerate(centroides):
+        valores = list(centroide)
+        valores += [valores[0]]
         
         fig.add_trace(go.Scatterpolar(
-            r=values,
-            theta=categories,
+            r=valores,
+            theta=categorias,
             fill='toself',
             name=f'Cluster {i}'
         ))
@@ -99,7 +99,7 @@ def plot_radar_centroids(centers: np.ndarray, feature_names: List[str]) -> go.Fi
         polar=dict(
             radialaxis=dict(
                 visible=True,
-                range=[centers.min(), centers.max()]
+                range=[centroides.min(), centroides.max()]
             )
         ),
         showlegend=True,
@@ -109,7 +109,7 @@ def plot_radar_centroids(centers: np.ndarray, feature_names: List[str]) -> go.Fi
     return fig
 
 
-def plot_scatter_2d(X: np.ndarray, labels: np.ndarray, feature_names: List[str]) -> go.Figure:
+def graficar_dispersion_2d(datos: np.ndarray, etiquetas: np.ndarray, nombres_caracteristicas: List[str]) -> go.Figure:
     """
     Gráfico de dispersión bidimensional estándar.
 
@@ -125,31 +125,31 @@ def plot_scatter_2d(X: np.ndarray, labels: np.ndarray, feature_names: List[str])
     de características específicas que le resulten de interés (ej. pH vs Densidad).
 
     Args:
-        X: Datos de entrada (N, 2).
-        labels: Etiquetas de cluster para cada punto (N,).
-        feature_names: Lista con los 2 nombres de features.
+        datos: Datos de entrada (N, 2).
+        etiquetas: Etiquetas de cluster para cada punto (N,).
+        nombres_caracteristicas: Lista con los 2 nombres de features.
 
     Returns:
         Objeto Figure de Plotly.
     """
-    df = pd.DataFrame(X, columns=feature_names)
-    df["Cluster"] = labels.astype(str)
+    df = pd.DataFrame(datos, columns=nombres_caracteristicas)
+    df["Cluster"] = etiquetas.astype(str)
 
     fig = px.scatter(
         df,
-        x=feature_names[0],
-        y=feature_names[1],
+        x=nombres_caracteristicas[0],
+        y=nombres_caracteristicas[1],
         color="Cluster",
-        title=f"Clusters 2D: {feature_names[0]} vs {feature_names[1]}",
+        title=f"Clusters 2D: {nombres_caracteristicas[0]} vs {nombres_caracteristicas[1]}",
         template="plotly_white",
         opacity=0.7,
-        labels={feature_names[0]: feature_names[0], feature_names[1]: feature_names[1]},
+        labels={nombres_caracteristicas[0]: nombres_caracteristicas[0], nombres_caracteristicas[1]: nombres_caracteristicas[1]},
     )
     fig.update_layout(legend_title_text="Cluster")
     return fig
 
 
-def plot_scatter_3d(X: np.ndarray, labels: np.ndarray, feature_names: List[str]) -> go.Figure:
+def graficar_dispersion_3d(datos: np.ndarray, etiquetas: np.ndarray, nombres_caracteristicas: List[str]) -> go.Figure:
     """
     Gráfico de dispersión tridimensional topológico.
 
@@ -163,23 +163,23 @@ def plot_scatter_3d(X: np.ndarray, labels: np.ndarray, feature_names: List[str])
     no separaciones complicadas concéntricas). 
 
     Args:
-        X: Datos de entrada (N, 3).
-        labels: Etiquetas de cluster para cada punto (N,).
-        feature_names: Lista con los 3 nombres de features.
+        datos: Datos de entrada (N, 3).
+        etiquetas: Etiquetas de cluster para cada punto (N,).
+        nombres_caracteristicas: Lista con los 3 nombres de features.
 
     Returns:
         Objeto Figure de Plotly.
     """
-    df = pd.DataFrame(X, columns=feature_names)
-    df["Cluster"] = labels.astype(str)
+    df = pd.DataFrame(datos, columns=nombres_caracteristicas)
+    df["Cluster"] = etiquetas.astype(str)
 
     fig = px.scatter_3d(
         df,
-        x=feature_names[0],
-        y=feature_names[1],
-        z=feature_names[2],
+        x=nombres_caracteristicas[0],
+        y=nombres_caracteristicas[1],
+        z=nombres_caracteristicas[2],
         color="Cluster",
-        title=f"Clusters 3D: {feature_names[0]}, {feature_names[1]}, {feature_names[2]}",
+        title=f"Clusters 3D: {nombres_caracteristicas[0]}, {nombres_caracteristicas[1]}, {nombres_caracteristicas[2]}",
         template="plotly_white",
         opacity=0.7,
     )

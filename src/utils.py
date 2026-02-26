@@ -5,7 +5,7 @@ from typing import Optional
 import numpy as np
 
 
-def ensure_rng(seed: Optional[int] = None) -> np.random.Generator:
+def asegurar_generador(semilla: Optional[int] = None) -> np.random.Generator:
     """
     Gestor de aleatoriedad centralizado del proyecto (Generador de Números Pseudoaleatorios).
     
@@ -16,6 +16,6 @@ def ensure_rng(seed: Optional[int] = None) -> np.random.Generator:
     Finalidad:
     Garantizar la reproducibilidad estricta de todos los experimentos K-Means, 
     evaluaciones y benchmarks. Todo proceso estocástico del backend pedirá su
-    `random_state` original derivando desde esta única semilla.
+    `estado_aleatorio` original derivando desde esta única semilla.
     """
-    return np.random.default_rng(seed)
+    return np.random.default_rng(semilla)

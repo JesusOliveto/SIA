@@ -10,21 +10,14 @@ desproporcionadamente a los centroides y arruine los clústeres.
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional
 
-import numpy as np
 import pandas as pd
 from scipy.io import arff
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def load_arff(path: Path) -> pd.DataFrame:
+def cargar_arff(ruta: Path) -> pd.DataFrame:
     """
     Carga de datos crudos.
     
@@ -38,28 +31,21 @@ def load_arff(path: Path) -> pd.DataFrame:
     Finalidad: 
     Ingesta inicial de los datos de la base de datos estática al pipeline en memoria.
     """
-    if not path.exists():
-        raise FileNotFoundError(f"File not found: {path}")
+    if not ruta.exists():
+        raise FileNotFoundError(f"Archivo no encontrado: {ruta}")
     
-    logger.info(f"Loading data from {path}...")
-    try:
-        data, meta = arff.loadarff(path)
-        df = pd.DataFrame(data)
-        
-        # Decode bytes columns to strings if necessary
-        for col in df.columns:
-            if df[col].dtype == object:
-                try:
-                    df[col] = df[col].apply(lambda x: x.decode('utf-8') if isinstance(x, bytes) else x)
-                except Exception as e:
-                    logger.warning(f"Could not decode column {col}: {e}")
-        
-        return df
-    except Exception as e:
-        logger.error(f"Failed to load ARFF file: {e}")
-        raise
+    logger.info(f"Cargando dataset original desde {ruta}...")
+    crudo, _ = arff.loadarff(ruta)
+    df = pd.DataFrame(crudo)
+    
+    # Decodificar columnas tipo byte a string (común en arff)
+    for col in df.select_dtypes([object]).columns:
+        if isinstance(df[col].iloc[0], bytes):
+            df[col] = df[col].str.decode('utf-8')
+            
+    return df
 
-def clean_outliers(df: pd.DataFrame, factor: float = 1.5) -> pd.DataFrame:
+def limpiar_atipicos(df: pd.DataFrame, factor: float = 1.5) -> pd.DataFrame:
     """
     Detección y eliminación de valores atípicos (Outliers).
     
@@ -84,38 +70,36 @@ def clean_outliers(df: pd.DataFrame, factor: float = 1.5) -> pd.DataFrame:
     Returns:
         DataFrame limpio.
     """
-    logger.info("Detecting outliers using IQR method...")
+    logger.info("Detectando outliers usando método IQR...")
     
-    # Select only numeric columns for outlier detection
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
-    
-    # Exclude 'class' column if it exists and is numeric (it shouldn't be touched)
-    if 'class' in numeric_cols:
-        numeric_cols = numeric_cols.drop('class')
-        
-    logger.info(f"Analyzing features: {list(numeric_cols)}")
-    
-    Q1 = df[numeric_cols].quantile(0.25)
-    Q3 = df[numeric_cols].quantile(0.75)
-    IQR = Q3 - Q1
-    
-    lower_bound = Q1 - factor * IQR
-    upper_bound = Q3 + factor * IQR
-    
-    # Keep rows where ALL features are within bounds
-    # Alternatively: Remove row if ANY feature is an outlier
-    condition = ~((df[numeric_cols] < lower_bound) | (df[numeric_cols] > upper_bound)).any(axis=1)
-    
-    df_clean = df[condition].copy()
-    
-    removed_count = len(df) - len(df_clean)
-    logger.info(f"Original shape: {df.shape}")
-    logger.info(f"Cleaned shape: {df_clean.shape}")
-    logger.info(f"Removed {removed_count} rows ({removed_count/len(df):.2%}).")
-    
-    return df_clean
+    # Excluir la columna categórica de clase al detectar numéricamente
+    columnas_numericas = df.select_dtypes(include=['float64', 'int64']).columns
+    if 'class' in columnas_numericas:
+        columnas_numericas = columnas_numericas.drop('class')
 
-def save_arff(df: pd.DataFrame, input_path: Path, output_path: Path) -> None:
+    filas_iniciales = len(df)
+    mascara_limpia = pd.Series(True, index=df.index)
+
+    for col in columnas_numericas:
+        Q1 = df[col].quantile(0.25)
+        Q3 = df[col].quantile(0.75)
+        IQR = Q3 - Q1
+        
+        limite_inferior = Q1 - factor * IQR
+        limite_superior = Q3 + factor * IQR
+        
+        mascara_columna = (df[col] >= limite_inferior) & (df[col] <= limite_superior)
+        mascara_limpia &= mascara_columna
+
+    df_limpio = df[mascara_limpia].copy()
+    
+    filas_removidas = filas_iniciales - len(df_limpio)
+    logger.info(f"Removidas {filas_removidas} filas conteniendo al menos un outlier. ({filas_removidas/filas_iniciales*100:.1f}%)")
+    logger.info(f"Forma original: {df.shape}, Forma limpia: {df_limpio.shape}")
+    
+    return df_limpio
+
+def guardar_arff(df: pd.DataFrame, ruta_entrada: Path, ruta_salida: Path) -> None:
     """
     Serialización de datos limpios.
     
@@ -123,54 +107,47 @@ def save_arff(df: pd.DataFrame, input_path: Path, output_path: Path) -> None:
     Vuelca el DataFrame procesado de nuevo al disco físico en el formato ARFF original.
     
     ¿Cómo lo hace?:
-    Es una escritura híbrida. Abre el archivo original (input_path) únicamente para "robar"
+    Es una escritura híbrida. Abre el archivo original (ruta_entrada) únicamente para "robar"
     la cabecera (los tags @RELATION y @ATTRIBUTE). Luego itera sobre los registros limpios 
     de Pandas y los añade al nuevo archivo como líneas de valores separados por comas.
     
     Finalidad:
-    Generar el artefacto final (`whinequalityclean.arff`) que la aplicación web consumirá 
+    Generar el artefacto final (`winequalityclean.arff`) que la aplicación web consumirá 
     durante el arranque, garantizando la persistencia de la limpieza.
 
     Args:
         df: DataFrame a guardar.
-        input_path: Ruta del archivo ARFF original (para extraer Metadata).
-        output_path: Ruta de escritura del nuevo dataset limpio.
+        ruta_entrada: Ruta del archivo ARFF original (para extraer Metadata).
+        ruta_salida: Ruta de escritura del nuevo dataset limpio.
     """
-    logger.info(f"Saving cleaned data to {output_path}...")
+    logger.info(f"Guardando datos limpios en {ruta_salida}...")
     
-    try:
-        with open(input_path, 'r') as f_in:
-            content = f_in.readlines()
-        
-        # Locate @DATA tag
-        data_start_idx = 0
-        for i, line in enumerate(content):
-            if line.strip().upper().startswith("@DATA"):
-                data_start_idx = i + 1
+    # 1. Extraer la cabecera original (Relación y Atributos)
+    cabecera_arff = []
+    with open(ruta_entrada, 'r', encoding='utf-8') as f:
+        for linea in f:
+            if linea.upper().startswith('@DATA'):
+                cabecera_arff.append(linea)
                 break
+            cabecera_arff.append(linea)
+
+    # 2. Escribir cabecera y datos
+    with open(ruta_salida, 'w', encoding='utf-8') as f:
+        f.writelines(cabecera_arff)
         
-        header = content[:data_start_idx]
-        
-        with open(output_path, 'w') as f_out:
-            f_out.writelines(header)
+        for i, fila in df.iterrows():
+            valores = []
+            for col in df.columns:
+                val = fila[col]
+                if isinstance(val, (int, float)):
+                    # Formatear números
+                    valores.append(str(val))
+                else:
+                    # Strings/Clases
+                    valores.append(str(val))
+            f.write(','.join(valores) + '\n')
             
-            # Write data rows
-            # We iterate to ensure correct formatting (strings vs numbers)
-            for _, row in df.iterrows():
-                line_parts = []
-                for col in df.columns:
-                    val = row[col]
-                    if isinstance(val, (int, float)):
-                        line_parts.append(str(val))
-                    else:
-                        line_parts.append(str(val))
-                f_out.write(",".join(line_parts) + "\n")
-                
-        logger.info("Save successful.")
-        
-    except Exception as e:
-        logger.error(f"Failed to save ARFF file: {e}")
-        raise
+    logger.info("Guardado completado exitosamente.")
 
 def main():
     """
@@ -180,21 +157,22 @@ def main():
     Une secuencialmente la Ingesta -> Limpieza -> Guardado en disco.
     Define las constantes de directorio y lanza el trabajo.
     """
-    base_dir = Path("datasets")
-    input_file = base_dir / "winequality.arff"
-    output_file = base_dir / "winequalityclean.arff" 
+    directorio_base = Path("datasets")
+    archivo_entrada = directorio_base / "winequality.arff"
+    archivo_salida = directorio_base / "winequalityclean.arff" 
     
-    if not input_file.exists():
-        logger.error(f"Input file not found: {input_file}")
+    if not archivo_entrada.exists():
+        logger.error(f"Archivo de entrada no encontrado: {archivo_entrada}")
         return
-
+        
     try:
-        df = load_arff(input_file)
-        df_clean = clean_outliers(df)
-        save_arff(df_clean, input_file, output_file)
-        logger.info("Data cleaning process completed.")
-    except Exception:
-        logger.error("Process failed.")
+        df_crudo = cargar_arff(archivo_entrada)
+        df_limpio = limpiar_atipicos(df_crudo)
+        guardar_arff(df_limpio, archivo_entrada, archivo_salida)
+        logger.info("Pipeline de limpieza finalizado.")
+    except Exception as e:
+        logger.error(f"El pipeline falló: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
