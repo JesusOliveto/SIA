@@ -12,6 +12,13 @@ from .kmeans_base import KMeansLike
 
 @dataclass
 class RunResult:
+    """
+    Estructura inmutable para registrar métricas de una sola iteracion (ejecución) de K-Means.
+    
+    ¿Qué hace?: 
+    Contiene la metadata del modelo entrenado y los resultados multidimensionales,
+    separando variables de estado (como labels), rendimiento e índices analíticos.
+    """
     impl: str
     k: int
     run: int
@@ -33,7 +40,23 @@ def evaluate_models(
     compute_silhouette: bool = False,
     y_true: Optional[np.ndarray] = None,
 ) -> List[RunResult]:
-    """Run multiple K selections and implementations, returning comparable metrics."""
+    """
+    Orquestador del pipeline de evaluación para el análisis comparativo (Benchmark).
+
+    ¿Qué hace?:
+    Toma un conjunto de implementaciones (Loop, Numpy, Sklearn), un rango de `K` y las evalúa.
+
+    ¿Cómo lo hace?:
+    Itera exhaustivamente calculando en tiempo real:
+    - Exactitud y penalización (Inercia).
+    - Eficiencia algorítmica (Tiempo de ajuste en segundos `fit_time`).
+    - Validación Interna: Silhouette Score si solicitado (cohesión y separación).
+    - Validación Externa: (ARI y NMI) si se provee la clase real (y_true).
+
+    Finalidad:
+    Generar un log consolidado y agnóstico a la implementación (`RunResult`)
+    que alimenta las visualizaciones académicas paramétricas de Streamlit.
+    """
 
     rng = np.random.default_rng(random_state)
     results: List[RunResult] = []

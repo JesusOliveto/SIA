@@ -8,18 +8,21 @@ from .utils import ensure_rng
 
 class KMeansNumpy:
     """
-    Implementación de K-Means utilizando vectorización con NumPy.
-    
-    ¿Por qué esta implementación?
-    ---------------------------
-    Esta versión optimiza el cálculo utilizando las capacidades de broadcasting de NumPy.
-    A diferencia de la implementación con bucles (`KMeansLoop`), esta versión realiza las
-    operaciones matriciales en C (via NumPy), lo que la hace órdenes de magnitud más rápida
-    y adecuada para datasets de tamaño real.
-    
-    Comparativa:
-    - vs KMeansLoop: Mucho más rápida y eficiente en código, pero más opaca en la lógica paso a paso.
-    - vs Sklearn: Implementación manual con fines educativos, sin las optimizaciones extremas (Cython) de Sklearn.
+    Implementación de K-Means utilizando vectorización integral con NumPy.
+
+    ¿Qué hace?:
+    Agrupa un conjunto de datos particionándolo en 'n_clusters' utilizando la 
+    metáfora probabilística del algoritmo iterativo original.
+
+    ¿Cómo lo hace?:
+    Reempleza los costosos iteradores `for` anidados de Python por tensores 
+    y manipulación de ejes de memoria lineal usando "broadcasting". 
+
+    Finalidad:
+    Demostrar el impacto monumental del cálculo matricial delegando las instrucciones
+    a C por debajo de la interfaz NumPy. Muestra un "punto intermedio" que es 
+    suficientemente rápido para la vida real pero al que el desarrollador aún
+    puede acceder para entender la implementación.
     """
 
     def __init__(self, n_clusters: int, max_iter: int = 300, tol: float = 1e-4, n_init: int = 1, random_state: int | None = None, verbose: bool = False) -> None:
@@ -53,17 +56,21 @@ class KMeansNumpy:
 
     def fit(self, X: np.ndarray) -> "KMeansNumpy":
         """
-        Calcula el clustering K-means.
+        Calcula el clustering K-means utilizando operaciones tensor-completas de NumPy.
+
+        ¿Qué hace?:
+        Coordina las iteraciones y los arranques ('n_init') del algoritmo buscando
+        el mejor modelo posible (aquél con la métrica de inercia más baja).
+
+        ¿Cómo lo hace?:
+        Controla los reinicios y se apoya en `_run_single` para gestionar la convergencia
+        vectorizada internamente. Garantiza conversiones estrictas a float64
+        para evitar overflows de puntero flotante.
         
-        Esta función inicializa los centroides y realiza iteraciones hasta la convergencia.
-        Utiliza operaciones vectorizadas de NumPy para el cálculo de distancias, lo que
-        resulta en un rendimiento superior en comparación con la implementación basada en bucles.
-
-        Args:
-            X: Array-like de forma (n_samples, n_features).
-
-        Returns:
-            self: El estimador ajustado.
+        Finalidad:
+        Intermediario principal de la API para recibir un dataset completo, entrenar el
+        modelo reteniendo las etiquetas/centroides idóneos, y devolver la propia instancia 
+        ajustada (encadenamiento de métodos).
         """
         X = np.asarray(X, dtype=np.float64)
         base_rng = ensure_rng(self.random_state)
@@ -90,14 +97,20 @@ class KMeansNumpy:
 
     def _run_single(self, X: np.ndarray, seed: int):
         """
-        Ejecuta una única iteración del algoritmo K-Means.
+        Ejecuta una única corrida (ejecución independiente) del algoritmo K-Means.
         
-        Args:
-            X: Datos de entrada.
-            seed: Semilla aleatoria para esta ejecución.
-            
-        Returns:
-            Tupla de (centros, etiquetas, inercia, n_iter).
+        ¿Qué hace?:
+        Lleva a cabo el proceso de inicialización y las fases de Lloyd: 
+        1) Actualizar Asignaciones, 2) Actualizar Centroides.
+        
+        ¿Cómo lo hace?:
+        Vectoriza brutalmente tanto la evaluación euclidiana como la recalculación.
+        La condición de parada se computa determinando la norma matricial del 
+        desplazamiento de clústeres (np.linalg.norm(new_centers - centers, axis=1)).
+        
+        Finalidad:
+        Motor de procesamiento principal. Busca la convergencia en el menor tiempo 
+        de cómputo posible evitando traspasos de memoria Python-runtime perjudiciales.
         """
         rng = ensure_rng(seed)
         n_samples = X.shape[0]
@@ -129,24 +142,38 @@ class KMeansNumpy:
 
     def _pairwise_distances(self, X: np.ndarray, centers: np.ndarray) -> np.ndarray:
         """
-        Calcula las distancias Euclidianas al cuadrado utilizando broadcasting.
+        Motor geométrico: Calcula distancias utilizando 'broadcasting'.
         
-        Esta técnica aprovecha las operaciones C optimizadas de NumPy, evitando bucles lentos de Python.
-        Es la clave para la eficiencia de esta implementación y la razón principal para usarla sobre
-        `KMeansLoop` cuando se require rendimiento en datasets medianos/grandes.
+        ¿Qué hace?:
+        Computa la distancia entre toda pareja de `(muestra, centroide)` posible 
+        escalando dinámicamente las dimensiones de los tensores.
         
-        Args:
-            X: Datos (N, D).
-            centers: Centroides (K, D).
-            
-        Returns:
-            Matriz de distancias (N, K).
+        ¿Cómo lo hace?:
+        Proyecta X de formato (N, D) a (N, 1, D) y altera 'centers' a (1, K, D). 
+        A partir de allí la resta se 'expande', generando un tensor 3D de 
+        formato (N, K, D), para luego hacer sum() cuadrática sobre el eje D.
+        
+        Finalidad:
+        Garantizar el punto más diferencial (O(1) ciclos for en Python) entre el 
+        algoritmo base y la optimización NumPy. Devuelve la malla
+        distancial necesaria para que argmin identifique los clusters.
         """
         diff = X[:, None, :] - centers[None, :, :]
         return np.sum(diff * diff, axis=2)
 
     def _recompute_centers(self, X: np.ndarray, labels: np.ndarray):
-        """Actualiza los centroides basándose en la media de los puntos asignados."""
+        """
+        Actualiza los centroides utilizando indexación booleana de NumPy.
+        
+        ¿Cómo lo hace?:
+        Recuenta asignaciones con `np.bincount` de antemano. Itera sólo a través de los
+        `K` clústeres para aplicar un filtrado booleano eficiente del tipo `X[labels == c_idx]`
+        calculando su media de forma nativa en C con `.mean(axis=0)`.
+
+        Finalidad:
+        Mover cada clúster de forma ultra-rápida y concurrente a su verdadero centro de masa 
+        sin el rastreo iterativo secuencial. Retorna además si un cluster se quedó sin datos.
+        """
         centers = np.zeros((self.n_clusters, X.shape[1]), dtype=np.float64)
         counts = np.bincount(labels, minlength=self.n_clusters).astype(np.int32)
         for c_idx in range(self.n_clusters):
@@ -157,10 +184,16 @@ class KMeansNumpy:
 
     def _fix_empty_clusters(self, X: np.ndarray, centers: np.ndarray, distances: np.ndarray, labels: np.ndarray) -> None:
         """
-        Reinicializa clusters vacíos moviéndolos al punto más lejano.
+        Mapea el algoritmo de salvaguarda contra "Singularidad" en operaciones tensoriales.
         
-        Estrategia: Encuentra el punto con la mayor distancia a su centroide actual
-        y lo convierte en el nuevo centro para el cluster vacío.
+        ¿Cómo lo hace?:
+        Usa indexaciones avanzadas como `distances[np.arange(...), labels]` para 
+        acceder de forma O(1) a la matriz de desviaciones, buscando sistemáticamente
+        el mayor outlier de todos a relocalizar y "salvar" el clúster inerte.
+
+        Finalidad:
+        Prevenir la formación de sub-clústeres vacíos donde `.mean(...)` retornaría
+        Valores nulos, lo que corrompe la convergencia geométrica de la vectorización en curso.
         """
         closest = distances[np.arange(distances.shape[0]), labels]
         farthest_idx = int(np.argmax(closest))

@@ -53,8 +53,6 @@ Este documento detalla secuencialmente las intervenciones realizadas en el proye
     - Se mejoró la presentación de los resultados de evaluación, ocultando las columnas "Iteraciones" y "Tiempo" de la tabla resumen para mayor claridad.
 
 
-
-
 ## 11. Funcionalidades Adicionales
 - **Objetivo:** Implementar funcionalidades faltantes detectadas.
 - **Acción:**
@@ -62,5 +60,10 @@ Este documento detalla secuencialmente las intervenciones realizadas en el proye
     - **Selección de Atributos:** Se implementó un multiselect en el sidebar que permite filtrar qué features utilizan los algoritmos.
     - **Visualización Directa:** Se añadió lógica para graficar Scatter 2D y 3D directos (sin PCA) cuando se seleccionan 2 o 3 atributos respectivamente.
 
----
-**Estado Final:** El proyecto cumple con todos los requerimientos académicos y técnicos.
+## 12. Documentación
+- **Objetivo:** Mejorar la documentación del proyecto.
+- **Acción:**
+    - Se actualizó la documentación de todos los archivos del proyecto.
+    - Se corrigieron los docstrings y se añadieron comentarios exhaustivos.
+
+

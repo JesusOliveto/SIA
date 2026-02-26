@@ -11,16 +11,24 @@ from sklearn.decomposition import PCA
 
 def plot_pca_2d(X: np.ndarray, labels: np.ndarray) -> go.Figure:
     """
-    Proyecta los datos a 2D utilizando PCA y genera un gráfico de dispersión con el color de los clusters.
+    Proyecta los datos de alta dimensionalidad a 2D utilizando PCA.
     
-    ¿Por qué PCA?
-    -------------
-    Como los datos tienen múltiples dimensiones (`D > 3`), no podemos graficarlos directamente.
-    PCA (Análisis de Componentes Principales) reduce la dimensionalidad conservando la mayor
-    varianza posible, permitiéndonos ver la separación de los clusters en un plano 2D.
+    ¿Qué hace?:
+    Toma un dataset de `D` dimensiones (ej. 11 propiedades físico-químicas del vino) 
+    y lo comprime en las 2 componentes ortogonales que capturan la mayor varianza.
+    Luego lo grafica en un scatter plot coloreado por clúster.
+    
+    ¿Cómo lo hace?:
+    Delega en `sklearn.decomposition.PCA` la transformación matemática (Extracción de
+    eigenvectores de la matriz de covarianza) y usa Plotly Express para el mapeo interactivo 2D.
+    
+    Finalidad:
+    Visualizar clústeres hiperdimensionales (`D > 3`) en una pantalla plana. Sirve
+    para auditar visualmente el trabajo del agrupador: Si K-Means fue exitoso, a menudo 
+    veremos manchas de color bien separadas en el plano de Componentes Principales.
 
     Args:
-        X: Datos de entrada (N, D).
+        X: Datos de entrada escalar (N, D).
         labels: Etiquetas de cluster para cada punto (N,).
 
     Returns:
@@ -47,16 +55,26 @@ def plot_pca_2d(X: np.ndarray, labels: np.ndarray) -> go.Figure:
 
 def plot_radar_centroids(centers: np.ndarray, feature_names: List[str]) -> go.Figure:
     """
-    Genera un gráfico de radar (araña) comparando los valores de los centroides para cada característica.
+    Genera un gráfico de radar (araña) multivariable comparando perfiles de centroides.
     
-    ¿Por qué Radar Chart?
-    ---------------------
-    Permite visualizar el "perfil" promedio de cada cluster. Es ideal para distinguir cualitativamente
-    qué características predominan en cada grupo (ej. un cluster con "Alta Acidez" vs uno con "Alto Alcohol").
+    ¿Qué hace?:
+    Grafica una red poligonal donde cada eje radial es una característica (feature) del
+    dataset y los vértices internos del polígono marcan el centro de masa del clúster
+    en esa dimensión particular.
+    
+    ¿Cómo lo hace?:
+    Extrae iterativamente las coordenadas `(K, D)` de cada centroide, "cierra el ciclo"
+    vectorial duplicando la última coordenada hacia el origen, e insta a `Plotly Scatterpolar`
+    a graficar el área de influencia de cada grupo superpuestos.
+    
+    Finalidad:
+    Proveer "Explicabilidad" (Explainable AI) a los usuarios no técnicos. En vez de
+    entregarles una etiqueta arbitraria '0,1,2', esto les permite perfilar semánticamente 
+    a cada clúster (ej. "Vino Rico en Azúcar y Bajo en Alcohol").
 
     Args:
         centers: Centros de cluster (K, D).
-        feature_names: Lista de nombres de características de longitud D.
+        feature_names: Nombres de características de longitud D.
 
     Returns:
         Objeto Figure de Plotly.
@@ -93,10 +111,18 @@ def plot_radar_centroids(centers: np.ndarray, feature_names: List[str]) -> go.Fi
 
 def plot_scatter_2d(X: np.ndarray, labels: np.ndarray, feature_names: List[str]) -> go.Figure:
     """
-    Genera un scatter plot 2D directo cuando se seleccionan exactamente 2 features.
+    Gráfico de dispersión bidimensional estándar.
 
-    A diferencia de plot_pca_2d, este gráfico no aplica ninguna reducción de dimensionalidad,
-    por lo que los ejes representan directamente los atributos seleccionados por el usuario.
+    ¿Qué hace?: 
+    Plotea muestras y sus clústeres asignados directamente sobre sus 2 variables nativas.
+    
+    ¿Cómo lo hace?:
+    Evita cualquier álgebra lineal reductiva y plotea con Plotly Express directamente
+    los datos pre-filtrados desde la UI.
+    
+    Finalidad:
+    Permitir al usuario probar manualmente la hipótesis de agrupamiento para pares
+    de características específicas que le resulten de interés (ej. pH vs Densidad).
 
     Args:
         X: Datos de entrada (N, 2).
@@ -125,7 +151,16 @@ def plot_scatter_2d(X: np.ndarray, labels: np.ndarray, feature_names: List[str])
 
 def plot_scatter_3d(X: np.ndarray, labels: np.ndarray, feature_names: List[str]) -> go.Figure:
     """
-    Genera un scatter plot 3D interactivo directo cuando se seleccionan exactamente 3 features.
+    Gráfico de dispersión tridimensional topológico.
+
+    ¿Qué hace?:
+    Aprovecha WebGL en el navegador para renderizar y rotar una nube de puntos
+    codificada por colores de clústeres para 3 predictores numéricos simultáneos.
+    
+    Finalidad:
+    Ayudar a visualizar la verdadera separación Euclidiana espacial de K-Means, 
+    la cual es su asunción geométrica intrínseca primaria (Clusters esféricos, 
+    no separaciones complicadas concéntricas). 
 
     Args:
         X: Datos de entrada (N, 3).
