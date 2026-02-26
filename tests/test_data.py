@@ -2,15 +2,15 @@ from pathlib import Path
 
 import numpy as np
 
-from src.data import EscaladorZScore, cargar_calidad_vino
+from src.data import EscaladorMinMax, cargar_calidad_vino
 
 
-def test_zscore_scaler_basic():
+def test_minmax_scaler_basic():
     X = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=np.float32)
-    scaler = EscaladorZScore()
+    scaler = EscaladorMinMax()
     Xn = scaler.ajustar_transformar(X)
-    assert np.allclose(Xn.mean(axis=0), [0.0, 0.0], atol=1e-7)
-    assert np.allclose(Xn.std(axis=0), [1.0, 1.0], atol=1e-7)
+    assert np.allclose(Xn.min(axis=0), [0.0, 0.0], atol=1e-7)
+    assert np.allclose(Xn.max(axis=0), [1.0, 1.0], atol=1e-7)
 
 
 def test_load_winequality_smoke():
