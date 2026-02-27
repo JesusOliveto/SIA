@@ -70,3 +70,13 @@ Este documento detalla secuencialmente las intervenciones realizadas en el proye
 - **Objetivo:** Mostrar la calidad promedio de los vinos en cada cluster.
 - **Acción:**
     - Se agregó una nueva pestaña para mostrar la calidad promedio de los vinos en cada cluster.
+
+## 14. Min-Max
+- **Objetivo:** Implementar la normalización Min-Max en el proyecto.
+- **Acción:**
+    - Se agregó la normalización Min-Max en el proyecto.
+
+## 15. Z-Score -> escalado optimo
+- **Objetivo:** Implementar la normalización Z-Score en el proyecto.
+- **Acción:**
+    - Se agregó la normalización Z-Score en el proyecto.

@@ -387,6 +387,7 @@ with tab_comparar:
                 - **Inercia (SSE):** Cohesión interna (Menor es mejor).
                 - **Silhouette:** Definición de clusters (-1 a 1, Mayor es mejor).
                 - **ARI (Adjusted Rand Index):** Coincidencia con la calidad real del vino (0 a 1, Mayor es mejor). Mide la utilidad real.
+                - **NMI (Normalized Mutual Information):** Información mutua normalizada entre clusters y calidad real (0 a 1, Mayor es mejor). Cuantifica cuánta información sobre la calidad retienen los clusters.
                 - **Tiempo:** Eficiencia computacional.
                 """
             )
