@@ -66,4 +66,7 @@ Este documento detalla secuencialmente las intervenciones realizadas en el proye
     - Se actualizó la documentación de todos los archivos del proyecto.
     - Se corrigieron los docstrings y se añadieron comentarios exhaustivos.
 
-
+## 13. Calidad Promedio por Cluster
+- **Objetivo:** Mostrar la calidad promedio de los vinos en cada cluster.
+- **Acción:**
+    - Se agregó una nueva pestaña para mostrar la calidad promedio de los vinos en cada cluster.
