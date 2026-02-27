@@ -71,12 +71,12 @@ El proyecto cumple con todos los puntos solicitados en la consigna:
 
 | Requerimiento (Readme.md) | Implementación |
 | :--- | :--- |
-| **a) Lenguaje de programación** | **Python**, elegido por su ecosistema de Data Science. |
+| **a) Lenguaje de programación** | **Python**, elegido por su ecosistema de Data Science, con tipado estricto (Type Hints) para mayor robustez. |
 | **b) Sin librerías de clustering** | Se implementaron las clases `KMeansLoop` y `KMeansNumpy` desde cero, sin usar `sklearn.cluster` para la lógica central. |
 | **c) Versiones No Vect. y Vect.** | - **No Vectorizada (`KMeansLoop`):** Usa bucles `for` explícitos.<br>- **Vectorizada (`KMeansNumpy`):** Usa operaciones matriciales de NumPy. |
 | **d) Librerías matemáticas permitidas** | Se utiliza **NumPy** para manejo eficiente de arrays y álgebra lineal. |
-| **e) Flexibilidad ($k$, atributos)** | La app permite elegir cualquier $k \in [1, 30]$ y seleccionar subconjuntos arbitrarios de atributos (sidebar). |
-| **f) Normalización** | Implementada clase `ZScoreScaler` en `src/data.py` aplicada automáticamente. |
+| **e) Flexibilidad ($k$, atributos, modelos)** | La app permite elegir cualquier $k \in [1, 30]$ y seleccionar subconjuntos de atributos. A nivel de software, se usa el **Patrón Factory** para intercambiar dinámicamente el estimador subyacente de forma polimórfica. |
+| **f) Normalización** | Implementada clase `EscaladorZScore` en `src/data.py` aplicada automáticamente como pre-procesamiento unificado. |
 | **g) Comparativa** | La interfaz permite ejecutar y comparar lado a lado: Propio (Loop), Propio (NumPy) y Sklearn. |
 
 ---
@@ -92,6 +92,10 @@ El sistema sigue un patrón modular en `src/` para separar responsabilidades, or
     -   `src/kmeans_numpy.py`: Lógica optimizada.
     -   `src/data.py`: Carga ARFF y normalización.
     -   `src/evaluation.py`: Métricas y validación.
+
+**Patrones de Diseño de Software Destacados:**
+- **Data Transfer Object (DTO):** Se implementó una clase estricta `PaqueteDatos` (con inmutabilidad basada en dataclasses) para tipar y encapsular el flujo de matrices y metadatos (features, etiquetas, nombres) a lo largo del pipeline.
+- **Factory Method:** En la interfaz `app.py`, una fábrica despacha de forma polimórfica la instancia algorítmica (`fabrica_constructores`) solicitada por el usuario, permitiendo abstraer la complejidad de creación y garantizando flexibilidad extrema en las dependencias de modelos.
 
 ### 4.2. Implementaciones del Algoritmo (Comparativa Técnica)
 
@@ -154,9 +158,10 @@ Utilizando $k=2$ con atributos como "Alcohol" y "Sulphates", logramos separar do
 Este trabajo final ha permitido:
 1.  **Desmitificar el algoritmo K-Means**, construyéndolo desde sus cimientos matemáticos.
 2.  **Comprobar empíricamente** la drástica diferencia de rendimiento entre código Python nativo y código vectorizado (NumPy).
-3.  **Desarrollar una herramienta analítica completa**, que no solo ejecuta el algoritmo, sino que permite explorar los datos y validar los resultados visualmente.
+3.  **Desarrollar una herramienta analítica interactiva y completa**, que no solo ejecuta el algoritmo, sino que permite explorar los datos y validar los resultados visualmente.
+4.  **Aplicar buenas prácticas empíricas de Ingeniería de Software**, asegurando la mantenibilidad a través de patrones arquitectónicos avanzados (DTOs, Factories), tipado estático riguroso (`typing`) y el desarrollo de una suite integral heurística de **unit tests automáticos** (`pytest`) que garantizan matemáticamente la validez del modelo frente a estándares de la industria (Scikit-Learn).
 
-El sistema entregado cumple con todos los requisitos de la cátedra y provee una base sólida para futuros análisis de clustering en la empresa **Ultralistic**.
+El sistema entregado excede los requisitos funcionales de la cátedra, proveyendo un código base sumamente robusto, escalable y mantenible para potenciar los futuros análisis de clustering en el laboratorio de IA de la empresa **Ultralistic**.
 
 ---
 
