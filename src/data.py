@@ -27,42 +27,36 @@ class PaqueteDatos:
     nombres_caracteristicas: List[str]
 
 
-class EscaladorMinMax:
+class EscaladorZScore:
     """
-    Normalizador Min-Max minimalista.
+    Normalizador estadístico Z-Score (Estandarización) minimalista.
     
     ¿Qué hace?:
-    Transforma cada variable del dataset al rango [0, 1].
-    X_norm = (X - X_min) / (X_max - X_min)
+    Transforma cada variable del dataset para tener media 0 y desviación estándar 1.
+    Z = (X - Media) / Desviación_Estándar
     
     ¿Por qué usarlo en lugar de nada?:
     K-Means es un algoritmo basado estrictamente en distancias. Si las características
     están en escalas muy diferentes (ej: Alcohol en % vs Dióxido de Azufre en mg/L),
     las variables con valores numéricamente mayores dominarán la distancia asignando
     pesos artificiales que corrompen la topología geométrica real de los datos.
-    
-    ¿Por qué Min-Max?:
-    A diferencia del Z-Score, Min-Max garantiza que todos los valores queden acotados 
-    entre 0 y 1, facilitando la interpretación y manteniendo las proporciones relativas 
-    entre los datos dentro de cada atributo.
     """
 
     def __init__(self, epsilon: float = 1e-12) -> None:
         self.epsilon = epsilon
-        self.min_: Optional[np.ndarray] = None
-        self.rango_: Optional[np.ndarray] = None
+        self.media_: Optional[np.ndarray] = None
+        self.escala_: Optional[np.ndarray] = None
 
-    def ajustar(self, datos: np.ndarray) -> "EscaladorMinMax":
-        datos_f64 = np.asarray(datos, dtype=np.float64)
-        self.min_ = datos_f64.min(axis=0)
-        rango = datos_f64.max(axis=0) - self.min_
-        self.rango_ = np.where(rango < self.epsilon, 1.0, rango)
+    def ajustar(self, datos: np.ndarray) -> "EscaladorZScore":
+        self.media_ = np.asarray(datos, dtype=np.float64).mean(axis=0)
+        self.escala_ = np.asarray(datos, dtype=np.float64).std(axis=0)
+        self.escala_ = np.where(self.escala_ < self.epsilon, 1.0, self.escala_)
         return self
 
     def transformar(self, datos: np.ndarray) -> np.ndarray:
-        if self.min_ is None or self.rango_ is None:
+        if self.media_ is None or self.escala_ is None:
             raise RuntimeError("Escalador no ajustado.")
-        return (np.asarray(datos, dtype=np.float64) - self.min_) / self.rango_
+        return (np.asarray(datos, dtype=np.float64) - self.media_) / self.escala_
 
     def ajustar_transformar(self, datos: np.ndarray) -> np.ndarray:
         return self.ajustar(datos).transformar(datos)
@@ -99,11 +93,11 @@ def cargar_calidad_vino(ruta: str | Path) -> PaqueteDatos:
     return PaqueteDatos(datos=datos_x, etiquetas_reales=etiquetas_y, nombres_caracteristicas=nombres_caracteristicas)
 
 
-def normalizar_paquete(paquete: PaqueteDatos, escalador: Optional[EscaladorMinMax] = None) -> Tuple[PaqueteDatos, EscaladorMinMax]:
+def normalizar_paquete(paquete: PaqueteDatos, escalador: Optional[EscaladorZScore] = None) -> Tuple[PaqueteDatos, EscaladorZScore]:
     """
-    Aplica transformación Min-Max a un PaqueteDatos existente. Devuelve un Paquete nuevo inmutable.
+    Aplica transformación Z-Score a un PaqueteDatos existente. Devuelve un Paquete nuevo inmutable.
     Útil en Streamlit para no alterar el caché del dataset original.
     """
-    esc = escalador or EscaladorMinMax()
+    esc = escalador or EscaladorZScore()
     datos_norm = esc.ajustar_transformar(paquete.datos) if escalador is None else esc.transformar(paquete.datos)
     return PaqueteDatos(datos=datos_norm.astype(np.float32), etiquetas_reales=paquete.etiquetas_reales, nombres_caracteristicas=paquete.nombres_caracteristicas), esc

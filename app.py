@@ -17,7 +17,7 @@ import plotly.express as px
 import streamlit as st
 from sklearn.metrics import silhouette_score
 
-from src.data import PaqueteDatos, normalizar_paquete, cargar_calidad_vino, EscaladorMinMax
+from src.data import PaqueteDatos, normalizar_paquete, cargar_calidad_vino, EscaladorZScore
 from src.evaluation import evaluar_modelos
 from src.kmeans_loop import KMeansLoop
 from src.kmeans_numpy import KMeansNumpy
@@ -47,7 +47,7 @@ def cargar_datos(nombre_archivo: str = "winequalityclean.arff") -> Tuple[Paquete
     
     ¿Qué hace?:
     Lee el archivo ARFF especificado, separa las características de los labels
-    y devuelve dos versiones del dataset: una cruda (original) y otra normalizada (Min-Max).
+    y devuelve dos versiones del dataset: una cruda (original) y otra estandarizada (Z-Score).
     
     ¿Cómo lo hace?:
     Aprovecha el decorador `@st.cache_data` de Streamlit para evitar recargar el archivo 
@@ -293,7 +293,7 @@ with tab_explorar:
         st.caption(f"Mostrando datos originales — {len(df_vista)} registros, {len(paquete_crudo.nombres_caracteristicas)} atributos")
     else:
         df_vista = pd.DataFrame(paquete_norm.datos, columns=paquete_crudo.nombres_caracteristicas)
-        st.caption(f"Mostrando datos normalizados (Min-Max) — {len(df_vista)} registros, {len(paquete_crudo.nombres_caracteristicas)} atributos")
+        st.caption(f"Mostrando datos normalizados (Z-Score) — {len(df_vista)} registros, {len(paquete_crudo.nombres_caracteristicas)} atributos")
 
     # Agregar columna de calidad (clase) si está disponible
     if paquete_crudo.etiquetas_reales is not None:
@@ -590,12 +590,12 @@ with tab_depurar:
 
                     fig_calor = px.imshow(
                         df_centroides,
-                        labels=dict(x="Característica", y="Cluster", color="Valor Normalizado"),
+                        labels=dict(x="Característica", y="Cluster", color="Z-Score"),
                         x=col_nombres_heatmap,
                         y=[f"Cluster {i}" for i in range(d_k)],
                         color_continuous_scale="RdBu_r",
                         aspect="auto",
-                        title="Mapa de Calor de Centroides (Normalizado Min-Max)"
+                        title="Mapa de Calor de Centroides (Estandarizado Z-Score)"
                     )
                     st.plotly_chart(fig_calor, use_container_width=True)
                     st.caption("Colores Rojos indican valores por encima del promedio. Azules indican por debajo.")
