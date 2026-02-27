@@ -295,6 +295,10 @@ with tab_explorar:
         df_vista = pd.DataFrame(paquete_norm.datos, columns=paquete_crudo.nombres_caracteristicas)
         st.caption(f"Mostrando datos normalizados (Min-Max) — {len(df_vista)} registros, {len(paquete_crudo.nombres_caracteristicas)} atributos")
 
+    # Agregar columna de calidad (clase) si está disponible
+    if paquete_crudo.etiquetas_reales is not None:
+        df_vista.insert(0, "Calidad", paquete_crudo.etiquetas_reales)
+
     st.dataframe(df_vista, use_container_width=True, height=280)
 
     col_stats1, col_stats2 = st.columns([2, 1])
@@ -482,7 +486,21 @@ with tab_predecir:
               st.write("3. Calculando distancias a centroides finales...")
               status.update(label="Clasificación Completada", state="complete", expanded=False)
 
-          col_res1, col_res2 = st.columns([1, 1])
+          # Calcular calidad promedio por cluster
+          modelo_pred = fabrica_constructores(p_impl)(p_k, int(p_semilla), detallado=False)
+          modelo_pred.ajustar(paquete_pred.datos)
+          etiquetas_entrenamiento = modelo_pred.etiquetas_
+
+          calidad_por_cluster = {}
+          if paquete_crudo.etiquetas_reales is not None:
+              for cid in range(p_k):
+                  mascara = etiquetas_entrenamiento == cid
+                  if mascara.any():
+                      calidad_por_cluster[cid] = float(paquete_crudo.etiquetas_reales[mascara].mean())
+                  else:
+                      calidad_por_cluster[cid] = None
+
+          col_res1, col_res2, col_res3 = st.columns([1, 1, 1])
           with col_res1:
               st.metric("Cluster Asignado", f"Cluster {etiqueta_asignada}")
               st.info(f"El vino ha sido clasificado en el Grupo {etiqueta_asignada}.")
@@ -490,10 +508,20 @@ with tab_predecir:
           with col_res2:
               st.markdown(f"**Distancia mínima:** {distancias_centro[etiqueta_asignada]:.4f}")
 
+          with col_res3:
+              if etiqueta_asignada in calidad_por_cluster and calidad_por_cluster[etiqueta_asignada] is not None:
+                  calidad_pred = calidad_por_cluster[etiqueta_asignada]
+                  st.metric("Calidad Predicha", f"{calidad_pred:.2f} / 10")
+                  st.caption("Promedio de calidad de los vinos en este cluster.")
+              else:
+                  st.metric("Calidad Predicha", "N/D")
+
           df_distancias = pd.DataFrame({
               "Cluster ID": range(p_k),
               "Distancia Euclidiana": distancias_centro,
-              "Estado": ["ASIGNADO" if i == etiqueta_asignada else "-" for i in range(p_k)]
+              "Calidad Promedio": [f"{calidad_por_cluster.get(i, 'N/D'):.2f}" if calidad_por_cluster.get(i) is not None else "N/D" for i in range(p_k)],
+              "Muestras": [int((etiquetas_entrenamiento == i).sum()) for i in range(p_k)],
+              "Estado": ["✅ ASIGNADO" if i == etiqueta_asignada else "-" for i in range(p_k)]
           })
           st.table(df_distancias.style.highlight_min(subset=["Distancia Euclidiana"], color="#d4edda", axis=0))
 
@@ -539,13 +567,31 @@ with tab_depurar:
 
                     col_nombres_selec = nombres_caracteristicas_seleccionadas
 
+                    # Calcular calidad promedio por cluster
+                    calidades_cluster = []
+                    if paquete_crudo.etiquetas_reales is not None:
+                        for cid in range(d_k):
+                            mascara = modelo_perf.etiquetas_ == cid
+                            if mascara.any():
+                                calidades_cluster.append(float(paquete_crudo.etiquetas_reales[mascara].mean()))
+                            else:
+                                calidades_cluster.append(0.0)
+
                     df_centroides = pd.DataFrame(modelo_perf.centroides_, columns=col_nombres_selec)
                     df_centroides.index.name = "Cluster"
+
+                    # Agregar calidad promedio al heatmap
+                    if calidades_cluster:
+                        escalador_calidad = paquete_crudo.etiquetas_reales.max() if paquete_crudo.etiquetas_reales is not None else 10
+                        df_centroides["Calidad Prom."] = [c / escalador_calidad for c in calidades_cluster]
+                        col_nombres_heatmap = list(col_nombres_selec) + ["Calidad Prom."]
+                    else:
+                        col_nombres_heatmap = list(col_nombres_selec)
 
                     fig_calor = px.imshow(
                         df_centroides,
                         labels=dict(x="Característica", y="Cluster", color="Valor Normalizado"),
-                        x=col_nombres_selec,
+                        x=col_nombres_heatmap,
                         y=[f"Cluster {i}" for i in range(d_k)],
                         color_continuous_scale="RdBu_r",
                         aspect="auto",
@@ -553,6 +599,26 @@ with tab_depurar:
                     )
                     st.plotly_chart(fig_calor, use_container_width=True)
                     st.caption("Colores Rojos indican valores por encima del promedio. Azules indican por debajo.")
+
+                # --- Tabla de Calidad por Cluster ---
+                if paquete_crudo.etiquetas_reales is not None:
+                    st.markdown("#### Calidad del Vino por Cluster")
+                    filas_calidad = []
+                    for cid in range(d_k):
+                        mascara = modelo_perf.etiquetas_ == cid
+                        clases_en_cluster = paquete_crudo.etiquetas_reales[mascara]
+                        if len(clases_en_cluster) > 0:
+                            filas_calidad.append({
+                                "Cluster": f"Cluster {cid}",
+                                "Muestras": int(mascara.sum()),
+                                "Calidad Promedio": f"{clases_en_cluster.mean():.2f}",
+                                "Calidad Mínima": int(clases_en_cluster.min()),
+                                "Calidad Máxima": int(clases_en_cluster.max()),
+                                "Desv. Estándar": f"{clases_en_cluster.std():.2f}",
+                            })
+                    df_calidad = pd.DataFrame(filas_calidad)
+                    st.dataframe(df_calidad, use_container_width=True, hide_index=True)
+                    st.caption("La calidad promedio indica qué nivel de vino tiende a agruparse en cada cluster (escala 1-10).")
 
                 st.markdown("#### Visualización Espacial")
                 num_sel = len(nombres_caracteristicas_seleccionadas)
